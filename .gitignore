@@ -1,0 +1,31 @@
+# ===== الأسرار (لا تُرفع أبداً) =====
+.env
+*.env
+backend/.env
+frontend/.env
+
+# ===== Python =====
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ===== الواجهة / Node =====
+node_modules/
+frontend/node_modules/
+frontend/dist/
+dist/
+build/
+
+# ===== أدوات الفحص (ملفات كبيرة — تُثبّت على الخادم) =====
+tools/
+
+# ===== ملفات النظام والمحرر =====
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ===== السجلات =====
+*.log
