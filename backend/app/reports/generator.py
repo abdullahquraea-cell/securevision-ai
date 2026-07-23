@@ -23,19 +23,38 @@ from bidi.algorithm import get_display
 
 
 # ===== تسجيل الخط العربي (Arial من نظام ويندوز) =====
+# ===== تسجيل الخط العربي (متعدّد الأنظمة: لينكس/ويندوز) =====
 FONT_NAME = "ArabicFont"
 FONT_BOLD = "ArabicFont-Bold"
 
-_arial = r"C:\Windows\Fonts\arial.ttf"
-_arial_bold = r"C:\Windows\Fonts\arialbd.ttf"
+# مرشّحات الخط (عادي، عريض) — نختار أول ما هو موجود
+_FONT_CANDIDATES = [
+    # لينكس (الخادم) — FreeSans يدعم العربية
+    ("/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+     "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf"),
+    # ويندوز (التطوير المحلي)
+    (r"C:\Windows\Fonts\arial.ttf", r"C:\Windows\Fonts\arialbd.ttf"),
+    # احتياطي
+    ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+]
 
-pdfmetrics.registerFont(TTFont(FONT_NAME, _arial))
-if os.path.exists(_arial_bold):
-    pdfmetrics.registerFont(TTFont(FONT_BOLD, _arial_bold))
+_regular = None
+_bold = None
+for _reg, _bd in _FONT_CANDIDATES:
+    if os.path.exists(_reg):
+        _regular = _reg
+        _bold = _bd if os.path.exists(_bd) else _reg
+        break
+
+if _regular:
+    pdfmetrics.registerFont(TTFont(FONT_NAME, _regular))
+    pdfmetrics.registerFont(TTFont(FONT_BOLD, _bold))
+    pdfmetrics.registerFontFamily(FONT_NAME, normal=FONT_NAME, bold=FONT_BOLD)
 else:
-    pdfmetrics.registerFont(TTFont(FONT_BOLD, _arial))
-
-pdfmetrics.registerFontFamily(FONT_NAME, normal=FONT_NAME, bold=FONT_BOLD)
+    # حل أخير حتى لا ينهار التطبيق (بلا دعم عربي كامل)
+    FONT_NAME = "Helvetica"
+    FONT_BOLD = "Helvetica-Bold"
 
 
 def ar(text) -> str:

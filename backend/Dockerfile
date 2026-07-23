@@ -6,9 +6,8 @@ ENV PYTHONUNBUFFERED=1 \
 
 # أدوات النظام + أدوات الفحص (nmap, sqlmap)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      nmap sqlmap curl unzip ca-certificates dnsutils \
+      nmap sqlmap curl unzip ca-certificates dnsutils fonts-freefont-ttf \
     && rm -rf /var/lib/apt/lists/*
-
 # تثبيت Nuclei (أحدث إصدار)
 RUN NUCLEI_VER=$(curl -s https://api.github.com/repos/projectdiscovery/nuclei/releases/latest \
       | grep '"tag_name"' | cut -d '"' -f4 | tr -d 'v') \
