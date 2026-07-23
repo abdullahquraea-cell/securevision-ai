@@ -11,6 +11,7 @@ from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.config import settings
 
 from app.models.user import User
 from app.models.organization import Organization
@@ -49,8 +50,8 @@ router = APIRouter(
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
-# رابط الواجهة الأمامية (تُبنى منه روابط التفعيل)
-FRONTEND_URL = "http://localhost:5173"
+# رابط الواجهة الأمامية (تُبنى منه روابط التفعيل) — من الإعدادات (.env)
+FRONTEND_URL = settings.FRONTEND_URL
 
 
 def _make_verification_link(token: str) -> str:
@@ -248,6 +249,7 @@ def resend_verification(
         "verification_link": None if email_sent else verification_link,
     }
 
+
 # ==========================
 # Login User
 # ==========================
@@ -319,7 +321,8 @@ def me(
 ):
     return current_user
 
-    # ==========================
+
+# ==========================
 # Forgot Password
 # ==========================
 
