@@ -1,6 +1,7 @@
 import os
 import ssl
 import smtplib
+import requests
 from pathlib import Path
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -33,11 +34,41 @@ def email_enabled() -> bool:
     return _get("EMAIL_ENABLED", "false").lower() == "true"
 
 
-def send_email(to_email: str, subject: str, html_body: str) -> bool:
-    """يرسل بريداً. يعيد True عند النجاح، False إن كان معطّلاً أو فشل."""
-    if not email_enabled():
+def _send_via_brevo(to_email: str, subject: str, html_body: str) -> bool:
+    """إرسال عبر Brevo HTTP API (منفذ 443 — غير محجوب)."""
+    api_key = _get("BREVO_API_KEY")
+    sender = _get("SMTP_FROM") or _get("SMTP_USER")
+    if not api_key or not sender:
+        print("[EMAIL] بيانات Brevo ناقصة")
+        return False
+    try:
+        resp = requests.post(
+            "https://api.brevo.com/v3/smtp/email",
+            headers={
+                "api-key": api_key,
+                "content-type": "application/json",
+                "accept": "application/json",
+            },
+            json={
+                "sender": {"email": sender, "name": "SecureVision AI"},
+                "to": [{"email": to_email}],
+                "subject": subject,
+                "htmlContent": html_body,
+            },
+            timeout=20,
+        )
+        if resp.status_code in (200, 201):
+            print(f"[EMAIL] تم الإرسال إلى {to_email} عبر Brevo ✅")
+            return True
+        print(f"[EMAIL ERROR] Brevo {resp.status_code}: {resp.text}")
+        return False
+    except Exception as e:
+        print(f"[EMAIL ERROR] Brevo: {e}")
         return False
 
+
+def _send_via_smtp(to_email: str, subject: str, html_body: str) -> bool:
+    """إرسال عبر SMTP (للتطوير المحلي؛ محجوب على DigitalOcean)."""
     host = _get("SMTP_HOST", "smtp.gmail.com")
     port = int(_get("SMTP_PORT", "587") or 587)
     user = _get("SMTP_USER")
@@ -60,11 +91,20 @@ def send_email(to_email: str, subject: str, html_body: str) -> bool:
             server.starttls(context=context)
             server.login(user, password)
             server.sendmail(sender, [to_email], msg.as_string())
-        print(f"[EMAIL] تم الإرسال إلى {to_email} ✅")
+        print(f"[EMAIL] تم الإرسال إلى {to_email} عبر SMTP ✅")
         return True
     except Exception as e:
-        print(f"[EMAIL ERROR] {e}")
+        print(f"[EMAIL ERROR] SMTP: {e}")
         return False
+
+
+def send_email(to_email: str, subject: str, html_body: str) -> bool:
+    """يرسل بريداً. يفضّل Brevo API، وإلا SMTP. يعيد True عند النجاح."""
+    if not email_enabled():
+        return False
+    if _get("BREVO_API_KEY"):
+        return _send_via_brevo(to_email, subject, html_body)
+    return _send_via_smtp(to_email, subject, html_body)
 
 
 def send_verification_email(to_email: str, link: str) -> bool:
