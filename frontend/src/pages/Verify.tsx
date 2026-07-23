@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import axios from "axios";
-
-const API = "http://localhost:8000";
+import api from "../api/axios";
 
 export default function Verify() {
   const { token } = useParams<{ token: string }>();
@@ -12,8 +10,8 @@ export default function Verify() {
 
   useEffect(() => {
     let active = true;
-    axios
-      .get(`${API}/auth/verify/${token}`)
+    api
+      .get(`/auth/verify/${token}`)
       .then((res) => {
         if (!active) return;
         setStatus("success");
