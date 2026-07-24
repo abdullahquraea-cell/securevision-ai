@@ -8,38 +8,55 @@ const menuItems = [
   { path: "/dashboard",       icon: "🏠", label: "لوحة التحكم",      roles: ["admin", "analyst", "viewer"] },
   { path: "/projects",        icon: "📁", label: "المشاريع",         roles: ["admin", "analyst", "viewer"] },
   { path: "/scans",           icon: "🛡️", label: "الفحص الأمني",     roles: ["admin", "analyst"] },
-  { path: "code-scanner", label: "فحص الكود", icon: "👨‍💻", roles: ["admin", "analyst"] },
-    { path: "/link-scanner",    icon: "🔗", label: "فاحص الروابط",     roles: ["admin", "analyst", "viewer"] },
-      { path: "/image-scanner",   icon: "🖼️", label: "فاحص الصور",      roles: ["admin", "analyst", "viewer"] },
-        { path: "/video-scanner",   icon: "🎬", label: "فاحص الفيديو",    roles: ["admin", "analyst", "viewer"] },
-        { path: "sqlmap-tester", label: "اختبار حقن SQL", icon: "💉", roles: ["admin", "analyst"] },
-        { path: "recon", label: "بصمة الموقع", icon: "🔎", roles: ["admin", "analyst"] },
-        { path: "file-discovery", label: "كشف الملفات", icon: "🗂️", roles: ["admin", "analyst"] },
-        { path: "subdomains", label: "النطاقات الفرعية", icon: "🌐", roles: ["admin", "analyst"] },
-        { path: "/message-scanner", icon: "💬", label: "فاحص الرسائل",    roles: ["admin", "analyst", "viewer"] },
+  { path: "code-scanner",     icon: "👨‍💻", label: "فحص الكود",       roles: ["admin", "analyst"] },
+  { path: "/link-scanner",    icon: "🔗", label: "فاحص الروابط",     roles: ["admin", "analyst", "viewer"] },
+  { path: "sqlmap-tester",    icon: "💉", label: "اختبار حقن SQL",   roles: ["admin", "analyst"] },
+  { path: "recon",            icon: "🔎", label: "بصمة الموقع",      roles: ["admin", "analyst"] },
+  { path: "file-discovery",   icon: "🗂️", label: "كشف الملفات",      roles: ["admin", "analyst"] },
+  { path: "subdomains",       icon: "🌐", label: "النطاقات الفرعية", roles: ["admin", "analyst"] },
   { path: "/vulnerabilities", icon: "🐞", label: "الثغرات",          roles: ["admin", "analyst", "viewer"] },
   { path: "/ai",              icon: "🤖", label: "الذكاء الاصطناعي", roles: ["admin", "analyst"] },
   { path: "/reports",         icon: "📄", label: "التقارير",         roles: ["admin", "analyst", "viewer"] },
   { path: "/users",           icon: "👥", label: "المستخدمون",       roles: ["admin"] },
   { path: "/activity",        icon: "📜", label: "سجل النشاط",       roles: ["admin"] },
-  { path: "subscription", label: "الاشتراك", icon: "💳", roles: ["admin", "analyst", "viewer"] },
-  { path: "/organization", label: "المؤسسة والفريق", icon: "🏢", roles: ["admin", "analyst"] },
+  { path: "subscription",     icon: "💳", label: "الاشتراك",         roles: ["admin", "analyst", "viewer"] },
+  { path: "/organization",    icon: "🏢", label: "المؤسسة والفريق",  roles: ["admin", "analyst"] },
   { path: "/settings",        icon: "⚙️", label: "الإعدادات",        roles: ["admin"] },
 ];
+
+// تنسيقات التجاوب مع الجوال (تُضاف تلقائياً)
+const responsiveCss = `
+.menu-toggle { display: none; }
+@media (max-width: 768px) {
+  .menu-toggle {
+    display: inline-flex; align-items: center; justify-content: center;
+    background: #3b82f6; color: #fff; border: none; border-radius: 8px;
+    width: 42px; height: 38px; font-size: 20px; cursor: pointer;
+    margin-inline-end: 10px;
+  }
+  .search-box { display: none !important; }
+  .sidebar {
+    position: fixed !important; top: 0; right: 0; bottom: 0;
+    height: 100vh !important; width: 250px !important; overflow-y: auto;
+    transform: translateX(100%); transition: transform .25s ease; z-index: 1000;
+  }
+  .sidebar.sidebar-open { transform: translateX(0); }
+  .sidebar-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 999; }
+  .main { width: 100% !important; }
+}
+`;
 
 function DashboardLayout() {
   const navigate = useNavigate();
   const [user, setUser] = useState<any>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
-
     if (!token) {
       navigate("/login");
       return;
     }
-
-    // التحقق الحقيقي من التوكن عبر السيرفر
     api
       .get("/auth/me")
       .then((response) => setUser(response.data))
@@ -57,19 +74,20 @@ function DashboardLayout() {
   };
 
   if (!user) {
-    return null; // بانتظار التحقق من التوكن
+    return null;
   }
 
-  // فلترة القائمة حسب صلاحية المستخدم
-  const allowedItems = menuItems.filter((item) =>
-    item.roles.includes(user.role)
-  );
+  const allowedItems = menuItems.filter((item) => item.roles.includes(user.role));
 
   return (
     <div className="layout">
+      <style>{responsiveCss}</style>
+
+      {/* طبقة معتمة خلف القائمة على الجوال */}
+      {menuOpen && <div className="sidebar-overlay" onClick={() => setMenuOpen(false)} />}
 
       {/* ===== القائمة الجانبية ===== */}
-      <aside className="sidebar">
+      <aside className={menuOpen ? "sidebar sidebar-open" : "sidebar"}>
         <div className="sidebar-logo">🛡️ SecureVision AI</div>
 
         <nav className="menu">
@@ -77,9 +95,8 @@ function DashboardLayout() {
             <NavLink
               key={item.path}
               to={item.path}
-              className={({ isActive }) =>
-                isActive ? "menu-item active" : "menu-item"
-              }
+              onClick={() => setMenuOpen(false)}
+              className={({ isActive }) => (isActive ? "menu-item active" : "menu-item")}
             >
               <span>{item.icon}</span>
               <span>{item.label}</span>
@@ -95,15 +112,9 @@ function DashboardLayout() {
 
       {/* ===== المنطقة الرئيسية ===== */}
       <div className="main">
-
-        {/* الشريط العلوي */}
         <header className="topbar">
-          <input
-            className="search-box"
-            type="text"
-            placeholder="🔍 بحث في النظام..."
-          />
-
+          <button className="menu-toggle" onClick={() => setMenuOpen(true)}>☰</button>
+          <input className="search-box" type="text" placeholder="🔍 بحث في النظام..." />
           <div className="topbar-user">
             <span>🔔</span>
             <span>👤 {user.username}</span>
@@ -111,11 +122,9 @@ function DashboardLayout() {
           </div>
         </header>
 
-        {/* محتوى الصفحة الحالية */}
         <main className="content">
           <Outlet context={user} />
         </main>
-
       </div>
     </div>
   );

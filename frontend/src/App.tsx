@@ -2,7 +2,6 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
-import Placeholder from "./pages/Placeholder";
 import DashboardLayout from "./components/DashboardLayout";
 import Projects from "./pages/Projects";
 import Scans from "./pages/Scans";
@@ -13,9 +12,6 @@ import Users from "./pages/Users";
 import Activity from "./pages/Activity";
 import Settings from "./pages/Settings";
 import LinkScanner from "./pages/LinkScanner";
-import ImageScanner from "./pages/ImageScanner";
-import MessageScanner from "./pages/MessageScanner";
-import VideoScanner from "./pages/VideoScanner";
 import SqlmapTester from "./pages/SqlmapTester";
 import ReconScanner from "./pages/ReconScanner";
 import FileDiscovery from "./pages/FileDiscovery";
@@ -46,9 +42,6 @@ function App() {
           <Route path="/scans" element={<Scans />} />
           <Route path="/link-scanner" element={<LinkScanner />} />
           <Route path="sqlmap-tester" element={<SqlmapTester />} />
-          <Route path="/image-scanner" element={<ImageScanner />} />
-          <Route path="/message-scanner" element={<MessageScanner />} />
-          <Route path="/video-scanner" element={<VideoScanner />} />
           <Route path="/vulnerabilities" element={<Vulnerabilities />} />
           <Route path="/ai" element={<AI />} />
           <Route path="/reports" element={<Reports />} />
@@ -65,7 +58,6 @@ function App() {
           <Route path="subscription/success" element={<SubscriptionSuccess />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password/:token" element={<ResetPassword />} />
-          
         </Route>
 
       </Routes>
