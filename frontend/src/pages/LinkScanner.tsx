@@ -35,7 +35,7 @@ function LinkScanner() {
       <div className="panel">
         <h3>افحص أي رابط قبل فتحه</h3>
         <p style={{ color: "#64748b", marginTop: 0 }}>
-          يكشف الروابط المزيفة والتصيّد (Phishing) والملغّمة عبر 12 فحصاً ذكياً — بلا فتح الرابط.
+                   فحص حقيقي: يحلّل بنية الرابط (تصيّد/انتحال) + يتّصل بالموقع فعلياً (استجابة، تحويلات، شهادة SSL).
         </p>
 
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>

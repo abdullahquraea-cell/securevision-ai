@@ -1,5 +1,9 @@
 import re
+import socket
+import ipaddress
 from urllib.parse import urlparse
+
+import httpx
 
 SUSPICIOUS_TLDS = {"tk", "ml", "ga", "cf", "gq", "top", "xyz", "work",
                    "click", "link", "country", "science", "party", "zip", "mov"}
@@ -14,6 +18,15 @@ BRAND_WORDS = ["paypal", "apple", "microsoft", "google", "amazon",
                "facebook", "instagram", "netflix", "whatsapp", "binance"]
 
 SEV_POINTS = {"critical": 40, "high": 25, "medium": 15, "low": 8}
+
+
+def _is_private(host: str) -> bool:
+    """يمنع فحص العناوين الداخلية (حماية من SSRF)."""
+    try:
+        ip = ipaddress.ip_address(socket.gethostbyname(host))
+        return ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local
+    except Exception:
+        return False
 
 
 def analyze_url(raw: str) -> dict:
@@ -37,6 +50,8 @@ def analyze_url(raw: str) -> dict:
             "severity": sev if not ok else "info",
             "detail": detail,
         })
+
+    # ========== فحوصات بنية الرابط (ثابتة) ==========
 
     # 1) عنوان IP بدل نطاق
     if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", host):
@@ -69,7 +84,7 @@ def analyze_url(raw: str) -> dict:
     else:
         add("مختصِر روابط", True, "medium", "ليس مختصِر روابط")
 
-    # 6) Punycode / انتحال حروف
+    # 6) Punycode
     if "xn--" in host:
         add("نطاق بحروف محاكية (Punycode)", False, "high", "قد يحاكي علامة تجارية بأحرف مشابهة")
     else:
@@ -116,6 +131,43 @@ def analyze_url(raw: str) -> dict:
     else:
         add("رموز مُرمّزة في الرابط", True, "low", "لا ترميز مشبوه")
 
+    # ========== فحوصات حيّة (اتصال فعلي بالرابط) ==========
+    if _is_private(host) or not host:
+        add("الفحص الحيّ", True, "low", "عنوان داخلي/غير صالح — تم تخطّي الاتصال الفعلي")
+    else:
+        try:
+            with httpx.Client(follow_redirects=True, timeout=8.0, verify=True) as client:
+                resp = client.get(url, headers={"User-Agent": "SecureVision-LinkScanner/1.0"})
+
+            final = str(resp.url)
+            final_host = (urlparse(final).hostname or "").lower()
+
+            # الموقع يستجيب
+            add("الموقع يستجيب فعلياً", True, "low", f"رمز الحالة: {resp.status_code}")
+
+            # إعادة توجيه لنطاق مختلف
+            if final_host and final_host != host:
+                add("إعادة التوجيه", False, "medium", f"يحوّلك إلى نطاق مختلف: {final_host}")
+            else:
+                add("إعادة التوجيه", True, "medium", "لا يحوّلك لنطاق مختلف")
+
+            # إفصاح الخادم
+            server = resp.headers.get("server")
+            if server:
+                add("إفصاح الخادم عن نوعه", False, "low", f"Server: {server}")
+            else:
+                add("إفصاح الخادم عن نوعه", True, "low", "لا يفصح عن نوعه")
+
+        except Exception as e:
+            msg = str(e).lower()
+            if "certificate" in msg or "ssl" in msg or "verify" in msg:
+                add("شهادة SSL صالحة", False, "high", "شهادة HTTPS غير صالحة أو منتهية — خطر انتحال")
+            elif "timeout" in msg:
+                add("الموقع يستجيب فعلياً", False, "low", "انتهت مهلة الاتصال — قد يكون بطيئاً أو معطّلاً")
+            else:
+                add("الموقع يستجيب فعلياً", False, "medium", "تعذّر الاتصال — قد يكون معطّلاً أو محجوباً")
+
+    # ========== الحكم النهائي ==========
     risk = min(100, score)
     if risk >= 60:
         verdict, level = "🔴 خطير — على الأرجح رابط تصيّد/ملغّم", "critical"
