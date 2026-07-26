@@ -29,15 +29,17 @@ FONT_BOLD = "ArabicFont-Bold"
 
 # مرشّحات الخط (عادي، عريض) — نختار أول ما هو موجود
 _FONT_CANDIDATES = [
-    # لينكس (الخادم) — FreeSans يدعم العربية
+    # خط أميري العربي — يدعم أشكال الحروف المتصلة كاملةً (الأفضل)
+    ("/usr/share/fonts/truetype/amiri/Amiri-Regular.ttf",
+     "/usr/share/fonts/truetype/amiri/Amiri-Bold.ttf"),
+    ("/usr/share/fonts/truetype/amiri/amiri-regular.ttf",
+     "/usr/share/fonts/truetype/amiri/amiri-bold.ttf"),
+    # ويندوز (التطوير المحلي) — Arial يدعم العربية
+    (r"C:\Windows\Fonts\arial.ttf", r"C:\Windows\Fonts\arialbd.ttf"),
+    # احتياطي أخير
     ("/usr/share/fonts/truetype/freefont/FreeSans.ttf",
      "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf"),
-    # ويندوز (التطوير المحلي)
-    (r"C:\Windows\Fonts\arial.ttf", r"C:\Windows\Fonts\arialbd.ttf"),
-    # احتياطي
-    ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
-]
+]   
 
 _regular = None
 _bold = None
