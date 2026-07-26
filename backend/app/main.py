@@ -17,7 +17,7 @@ from app.models.finding import Finding
 from app.routers import (
     auth, projects, scans, findings, ai, reports,
     users, activity, settings as settings_router, stats,
-    urlcheck, imagecheck, messagecheck, videocheck,
+    urlcheck, contact,
     sqlmaptest,recon,filediscovery,subdomains,codescan,subscription,organizations,
 )
 
@@ -78,9 +78,7 @@ app.include_router(activity.router)
 app.include_router(settings_router.router)
 app.include_router(stats.router)
 app.include_router(urlcheck.router)
-app.include_router(imagecheck.router)
-app.include_router(messagecheck.router)
-app.include_router(videocheck.router)
+app.include_router(contact.router)
 app.include_router(sqlmaptest.router)
 app.include_router(recon.router)
 app.include_router(filediscovery.router)

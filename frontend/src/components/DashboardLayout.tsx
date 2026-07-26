@@ -21,6 +21,7 @@ const menuItems = [
   { path: "/activity",        icon: "📜", label: "سجل النشاط",       roles: ["admin"] },
   { path: "subscription",     icon: "💳", label: "الاشتراك",         roles: ["admin", "analyst", "viewer"] },
   { path: "/organization",    icon: "🏢", label: "المؤسسة والفريق",  roles: ["admin", "analyst"] },
+    { path: "about",            icon: "ℹ️", label: "عن المنصّة",       roles: ["admin", "analyst", "viewer"] },
   { path: "/settings",        icon: "⚙️", label: "الإعدادات",        roles: ["admin"] },
 ];
 

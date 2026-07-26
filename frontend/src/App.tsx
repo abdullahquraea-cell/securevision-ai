@@ -23,6 +23,7 @@ import Organization from "./pages/Organization";
 import SubscriptionSuccess from "./pages/SubscriptionSuccess";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
+import About from "./pages/About";
 
 
 function App() {
@@ -53,6 +54,7 @@ function App() {
           <Route path="subdomains" element={<SubdomainScanner />} />
           <Route path="code-scanner" element={<CodeScanner />} />
           <Route path="subscription" element={<Subscription />} />
+          <Route path="about" element={<About />} />
           <Route path="/verify/:token" element={<Verify />} />
           <Route path="organization" element={<Organization />} />
           <Route path="subscription/success" element={<SubscriptionSuccess />} />
