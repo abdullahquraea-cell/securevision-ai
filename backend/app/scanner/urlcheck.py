@@ -29,6 +29,12 @@ def _is_private(host: str) -> bool:
         return False
 
 
+def _base_domain(h: str) -> str:
+    """النطاق الأساسي (آخر جزأين) — لتجاهل www والنطاقات الفرعية لنفس الموقع."""
+    parts = h.split(".")
+    return ".".join(parts[-2:]) if len(parts) >= 2 else h
+
+
 def analyze_url(raw: str) -> dict:
     checks = []
     score = 0
@@ -51,66 +57,56 @@ def analyze_url(raw: str) -> dict:
             "detail": detail,
         })
 
-    # ========== فحوصات بنية الرابط (ثابتة) ==========
+    # ========== فحوصات بنية الرابط ==========
 
-    # 1) عنوان IP بدل نطاق
     if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", host):
         add("استخدام IP بدل اسم نطاق", False, "high", f"يستخدم IP مباشر: {host}")
     else:
         add("استخدام IP بدل اسم نطاق", True, "high", "يستخدم اسم نطاق عادي")
 
-    # 2) رمز @
     if "@" in after_scheme:
         add("وجود رمز @ في الرابط", False, "high", "@ يُستخدم لإخفاء الوجهة الحقيقية")
     else:
         add("وجود رمز @ في الرابط", True, "high", "لا يوجد @")
 
-    # 3) HTTPS
     if p.scheme != "https":
         add("الاتصال مشفّر (HTTPS)", False, "medium", "يستخدم HTTP غير المشفّر")
     else:
         add("الاتصال مشفّر (HTTPS)", True, "medium", "يستخدم HTTPS")
 
-    # 4) امتداد مشبوه
     tld = host.split(".")[-1] if "." in host else ""
     if tld in SUSPICIOUS_TLDS:
         add("امتداد نطاق مشبوه", False, "medium", f".{tld} شائع في المواقع المزيفة")
     else:
         add("امتداد نطاق مشبوه", True, "medium", f"امتداد .{tld} عادي")
 
-    # 5) مختصِر روابط
     if host in SHORTENERS:
         add("مختصِر روابط", False, "medium", f"{host} يخفي الوجهة الحقيقية")
     else:
         add("مختصِر روابط", True, "medium", "ليس مختصِر روابط")
 
-    # 6) Punycode
     if "xn--" in host:
         add("نطاق بحروف محاكية (Punycode)", False, "high", "قد يحاكي علامة تجارية بأحرف مشابهة")
     else:
         add("نطاق بحروف محاكية (Punycode)", True, "high", "لا يوجد ترميز مشبوه")
 
-    # 7) طول الرابط
     if len(url) > 75:
         add("طول الرابط", False, "low", f"طويل ({len(url)} حرف) — أسلوب تمويه")
     else:
         add("طول الرابط", True, "low", "طول طبيعي")
 
-    # 8) كثرة النطاقات الفرعية
     dots = host.count(".")
     if dots >= 4:
         add("كثرة النطاقات الفرعية", False, "medium", f"{dots} نطاقات فرعية — تمويه")
     else:
         add("كثرة النطاقات الفرعية", True, "medium", "عدد طبيعي")
 
-    # 9) كلمات تصيّد في النطاق
     hits = [k for k in PHISH_KEYWORDS if k in host]
     if hits:
         add("كلمات تصيّد في النطاق", False, "medium", "كلمات: " + ", ".join(hits))
     else:
         add("كلمات تصيّد في النطاق", True, "medium", "لا كلمات مشبوهة")
 
-    # 10) انتحال علامة تجارية
     brand_hits = [b for b in BRAND_WORDS if b in host]
     legit = any(host == b + ".com" or host.endswith("." + b + ".com") for b in brand_hits)
     if brand_hits and not legit:
@@ -118,52 +114,43 @@ def analyze_url(raw: str) -> dict:
     else:
         add("انتحال علامة تجارية", True, "high", "لا انتحال واضح")
 
-    # 11) رموز وأرقام كثيرة
     digits = sum(c.isdigit() for c in host)
     if host.count("-") >= 3 or digits >= 5:
         add("شرطات/أرقام كثيرة في النطاق", False, "low", "مؤشّر تمويه")
     else:
         add("شرطات/أرقام في النطاق", True, "low", "طبيعي")
 
-    # 12) رموز مُرمّزة
     if "%" in url:
         add("رموز مُرمّزة في الرابط", False, "low", "قد تُستخدم لإخفاء محتوى")
     else:
         add("رموز مُرمّزة في الرابط", True, "low", "لا ترميز مشبوه")
 
-    # ========== فحوصات حيّة (اتصال فعلي بالرابط) ==========
+    # ========== فحوصات حيّة (اتصال فعلي) ==========
     if _is_private(host) or not host:
         add("الفحص الحيّ", True, "low", "عنوان داخلي/غير صالح — تم تخطّي الاتصال الفعلي")
     else:
         try:
             with httpx.Client(follow_redirects=True, timeout=8.0, verify=True) as client:
                 resp = client.get(url, headers={"User-Agent": "SecureVision-LinkScanner/1.0"})
+            final_host = (urlparse(str(resp.url)).hostname or "").lower()
 
-            final = str(resp.url)
-            final_host = (urlparse(final).hostname or "").lower()
-
-            # الموقع يستجيب
             add("الموقع يستجيب فعلياً", True, "low", f"رمز الحالة: {resp.status_code}")
 
-            # إعادة توجيه لنطاق مختلف
-            if final_host and final_host != host:
-                add("إعادة التوجيه", False, "medium", f"يحوّلك إلى نطاق مختلف: {final_host}")
+            if final_host and _base_domain(final_host) != _base_domain(host):
+                add("إعادة التوجيه لنطاق مختلف", False, "medium", f"يحوّلك إلى: {final_host}")
             else:
-                add("إعادة التوجيه", True, "medium", "لا يحوّلك لنطاق مختلف")
+                add("إعادة التوجيه", True, "low", "لا يحوّلك لنطاق خارجي مختلف")
 
-            # إفصاح الخادم
+            # نوع الخادم: معلومة فقط (لا تُحتسب كخطر)
             server = resp.headers.get("server")
-            if server:
-                add("إفصاح الخادم عن نوعه", False, "low", f"Server: {server}")
-            else:
-                add("إفصاح الخادم عن نوعه", True, "low", "لا يفصح عن نوعه")
+            add("نوع خادم الموقع", True, "info", f"Server: {server}" if server else "غير معلن")
 
         except Exception as e:
             msg = str(e).lower()
             if "certificate" in msg or "ssl" in msg or "verify" in msg:
                 add("شهادة SSL صالحة", False, "high", "شهادة HTTPS غير صالحة أو منتهية — خطر انتحال")
             elif "timeout" in msg:
-                add("الموقع يستجيب فعلياً", False, "low", "انتهت مهلة الاتصال — قد يكون بطيئاً أو معطّلاً")
+                add("الموقع يستجيب فعلياً", False, "low", "انتهت مهلة الاتصال")
             else:
                 add("الموقع يستجيب فعلياً", False, "medium", "تعذّر الاتصال — قد يكون معطّلاً أو محجوباً")
 
