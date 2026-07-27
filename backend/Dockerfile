@@ -6,8 +6,13 @@ ENV PYTHONUNBUFFERED=1 \
 
 # أدوات النظام + أدوات الفحص (nmap, sqlmap)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      nmap sqlmap curl unzip ca-certificates dnsutils fonts-freefont-ttf fonts-hosny-amiri \
+      nmap sqlmap curl unzip ca-certificates dnsutils fonts-freefont-ttf \
     && rm -rf /var/lib/apt/lists/*
+
+# تنزيل خط Amiri العربي مباشرةً (مضمون — من Google Fonts)
+RUN mkdir -p /usr/share/fonts/arabic \
+    && curl -fsSL https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Regular.ttf -o /usr/share/fonts/arabic/Amiri-Regular.ttf \
+    && curl -fsSL https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Bold.ttf -o /usr/share/fonts/arabic/Amiri-Bold.ttf
 # تثبيت Nuclei (أحدث إصدار)
 RUN NUCLEI_VER=$(curl -s https://api.github.com/repos/projectdiscovery/nuclei/releases/latest \
       | grep '"tag_name"' | cut -d '"' -f4 | tr -d 'v') \
