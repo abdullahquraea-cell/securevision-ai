@@ -1,19 +1,35 @@
 import os
 import re
+import shutil
 import subprocess
 import sys
 
 
-# مسار SQLMap
-SQLMAP_PATH = os.getenv(
-    "SQLMAP_PATH",
-    r"D:\Projects\SecureVision-AI\tools\sqlmap-master\sqlmap.py",
-)
+def _resolve_sqlmap() -> list:
+    """يحدّد طريقة تشغيل SQLMap تلقائياً على أي نظام (لينكس/ويندوز)."""
+    # 1) أولوية لمتغيّر البيئة SQLMAP_PATH إن كان مضبوطاً ويشير لملف موجود
+    env_path = os.getenv("SQLMAP_PATH")
+    if env_path and os.path.isfile(env_path):
+        if env_path.endswith(".py"):
+            return [sys.executable, env_path]
+        return [env_path]
+
+    # 2) البحث عن أمر sqlmap المثبَّت في النظام (الخادم: /usr/bin/sqlmap)
+    found = shutil.which("sqlmap")
+    if found:
+        return [found]
+
+    # 3) البحث عن سكربت sqlmap.py في PATH (بعض التثبيتات)
+    found_py = shutil.which("sqlmap.py")
+    if found_py:
+        return [sys.executable, found_py]
+
+    return []
 
 
 def is_available() -> bool:
-    """هل ملف sqlmap.py موجود؟"""
-    return os.path.isfile(SQLMAP_PATH)
+    """هل SQLMap متاح على هذا النظام؟"""
+    return bool(_resolve_sqlmap())
 
 
 def run_sqlmap(url: str, get_dbs: bool = True, timeout: int = 180) -> dict:
@@ -30,15 +46,14 @@ def run_sqlmap(url: str, get_dbs: bool = True, timeout: int = 180) -> dict:
         "raw_tail": "",
     }
 
-    if not is_available():
+    base = _resolve_sqlmap()
+    if not base:
         result["raw_tail"] = "SQLMap غير مثبّت على الخادم."
         return result
 
-    cmd = [
-        sys.executable,          # نفس مفسّر Python الحالي
-        SQLMAP_PATH,
+    cmd = base + [
         "-u", url,
-                "--batch",               # تلقائي بلا أسئلة
+        "--batch",               # تلقائي بلا أسئلة
         "--level=2",
         "--risk=1",
         "--technique=BEU",       # أنواع سريعة فقط (Boolean/Error/Union) — نتجنّب time-based البطيء
