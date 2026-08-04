@@ -1,7 +1,7 @@
 """
 راوتر فحص التطبيقات — يدعم:
 - رفع ملفّ (APK/IPA/EXE/ELF/DMG/MSI/DEB)
-- (لاحقاً) رابط Play Store / App Store / رابط مباشر
+- رابط Play Store / App Store / رابط مباشر
 """
 import os
 import tempfile
@@ -69,9 +69,8 @@ async def upload_and_analyze(
             pass
 
 
-
-        class UrlScanRequest(BaseModel):
-           url: str
+class UrlScanRequest(BaseModel):
+    url: str
 
 
 @router.post("/analyze-url")
