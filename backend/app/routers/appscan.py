@@ -71,7 +71,7 @@ async def upload_and_analyze(
 
 
         class UrlScanRequest(BaseModel):
-            url: str
+           url: str
 
 
 @router.post("/analyze-url")
