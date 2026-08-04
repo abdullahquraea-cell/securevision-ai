@@ -181,6 +181,19 @@ def analyze_file(file_path: str, original_name: str = "") -> dict:
     elif entropy >= 7.0:
         entropy_note = "مرتفع"
 
+    # ---- التحليل العميق حسب النوع ----
+    deep = None
+    t = type_info.get("type")
+    try:
+        if t == "android_app":
+            from . import apk_analyzer
+            deep = apk_analyzer.analyze_apk(file_path)
+        elif t == "windows_pe":
+            from . import pe_analyzer
+            deep = pe_analyzer.analyze_pe(file_path)
+    except Exception as e:
+        deep = {"error": f"فشل التحليل العميق: {e}"}
+
     return {
         "file_name": original_name or os.path.basename(file_path),
         "size_bytes": size,
@@ -191,6 +204,7 @@ def analyze_file(file_path: str, original_name: str = "") -> dict:
             "value": entropy,
             "note": entropy_note,
         },
-        "phase": 1,
-        "message": "تمّ الكشف الأولي بنجاح — التحليل العميق سيُطبَّق في المراحل التالية.",
+        "deep": deep,
+        "phase": 2,
+        "message": "التحليل الأوّلي + العميق اكتمل بنجاح.",
     }

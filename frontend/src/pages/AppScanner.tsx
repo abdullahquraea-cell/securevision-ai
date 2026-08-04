@@ -10,6 +10,28 @@ const ALLOWED_EXTS = [
   ".jar",
 ];
 
+const AR_LABELS: Record<string, string> = {
+  app_name: "اسم التطبيق",
+  package: "الحزمة (Package)",
+  version_name: "النسخة",
+  version_code: "رقم النسخة",
+  min_sdk: "أدنى إصدار أندرويد",
+  target_sdk: "الإصدار المستهدف",
+  type: "النوع",
+  architecture: "المعمارية",
+  compile_time: "زمن الترجمة",
+  product_name: "اسم المنتج",
+  company: "الشركة المطوّرة",
+  file_version: "نسخة الملفّ",
+  file_description: "وصف الملفّ",
+  copyright: "حقوق النشر",
+  original_filename: "اسم الملفّ الأصلي",
+};
+
+function labelFor(k: string): string {
+  return AR_LABELS[k] || k;
+}
+
 function AppScanner() {
   const [mode, setMode] = useState<"upload" | "url">("upload");
   const [file, setFile] = useState<File | null>(null);
@@ -72,7 +94,6 @@ function AppScanner() {
     }
   };
 
-  // ---------- التصميم ----------
   const btnStyle = (active: boolean): React.CSSProperties => ({
     padding: "10px 20px",
     background: active ? "#3b82f6" : "#f1f5f9",
@@ -244,6 +265,226 @@ function AppScanner() {
           <div className="panel" style={{ background: "#eff6ff", border: "1px solid #bfdbfe" }}>
             ℹ️ {data.message}
           </div>
+
+          {/* ========== التحليل العميق ========== */}
+          {data.deep && !data.deep.error && (
+            <>
+              {/* درجة المخاطرة */}
+              {data.deep.risk_score && (
+                <div className="panel" style={{
+                  background: data.deep.risk_score.score >= 70 ? "#fef2f2" :
+                              data.deep.risk_score.score >= 40 ? "#fffbeb" :
+                              data.deep.risk_score.score >= 20 ? "#f0f9ff" : "#f0fdf4",
+                  border: `2px solid ${
+                    data.deep.risk_score.score >= 70 ? "#fca5a5" :
+                    data.deep.risk_score.score >= 40 ? "#fcd34d" :
+                    data.deep.risk_score.score >= 20 ? "#93c5fd" : "#86efac"
+                  }`,
+                }}>
+                  <h3>🎯 درجة المخاطرة</h3>
+                  <div style={{ fontSize: "56px", fontWeight: 700, textAlign: "center", margin: "10px 0" }}>
+                    {data.deep.risk_score.score} / 100
+                  </div>
+                  <div style={{ fontSize: "20px", fontWeight: 600, textAlign: "center", marginBottom: "15px" }}>
+                    المستوى: {data.deep.risk_score.level}
+                  </div>
+                  {data.deep.risk_score.reasons?.length > 0 && (
+                    <ul style={{ margin: 0, paddingInlineStart: "20px" }}>
+                      {data.deep.risk_score.reasons.map((r: string, i: number) => (
+                        <li key={i} style={{ padding: "4px 0" }}>{r}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+
+              {/* معلومات التطبيق */}
+              {data.deep.info && (
+                <div className="panel">
+                  <h3>📋 معلومات التطبيق</h3>
+                  {Object.entries(data.deep.info).map(([k, v]) =>
+                    v ? <div key={k}>{infoRow(labelFor(k), v as any)}</div> : null
+                  )}
+                </div>
+              )}
+
+              {/* التوقيع الرقمي (PE) */}
+              {data.deep.signed && (
+                <div className="panel">
+                  <h3>✍️ التوقيع الرقمي</h3>
+                  {infoRow("موقّع رقمياً", data.deep.signed.signed ? "✅ نعم" : "❌ لا")}
+                  {data.deep.signed.size_bytes && infoRow("حجم التوقيع", data.deep.signed.size_bytes + " byte")}
+                </div>
+              )}
+
+              {/* الشهادات (APK) */}
+              {data.deep.certificates && data.deep.certificates.length > 0 && (
+                <div className="panel">
+                  <h3>🪪 الشهادة الرقمية</h3>
+                  {data.deep.certificates.map((c: any, i: number) => (
+                    <div key={i} style={{ padding: "8px 0", borderBottom: "1px solid #f1f5f9" }}>
+                      {infoRow("المُصدر (Issuer)", c.issuer)}
+                      {infoRow("الموضوع (Subject)", c.subject)}
+                      {infoRow("SHA256", c.sha256)}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* الرايات الخطرة (APK) */}
+              {data.deep.flags && (
+                <div className="panel">
+                  <h3>🚩 الرايات الأمنية</h3>
+                  {infoRow("وضع Debug", data.deep.flags.debuggable ? "⚠️ مُفعَّل (خطر)" : "✅ معطَّل")}
+                  {infoRow("النسخ الاحتياطي", data.deep.flags.allow_backup ? "⚠️ مسموح" : "✅ ممنوع")}
+                </div>
+              )}
+
+              {/* الصلاحيات (APK) */}
+              {data.deep.permissions && (
+                <div className="panel">
+                  <h3>🔓 الصلاحيات ({data.deep.permissions.total})</h3>
+                  <div style={{ marginBottom: "12px", color: "#64748b" }}>
+                    عاديّة: {data.deep.permissions.normal_count} · خطرة: {data.deep.permissions.dangerous.length}
+                  </div>
+                  {data.deep.permissions.dangerous.length === 0 ? (
+                    <p style={{ color: "#16a34a" }}>✅ لا صلاحيات خطرة</p>
+                  ) : (
+                    data.deep.permissions.dangerous.map((p: any, i: number) => (
+                      <div key={i} style={{ padding: "10px", background: "#fef2f2", borderRadius: "6px", marginBottom: "6px", border: "1px solid #fecaca" }}>
+                        <div style={{ fontWeight: 600, color: "#991b1b" }}>⚠️ {p.description}</div>
+                        <div style={{ fontSize: "12px", color: "#64748b", direction: "ltr" }}>{p.name}</div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {/* المكوّنات (APK) */}
+              {data.deep.components && (
+                <div className="panel">
+                  <h3>🧱 مكوّنات التطبيق</h3>
+                  {infoRow("الأنشطة (Activities)", data.deep.components.activities)}
+                  {infoRow("الخدمات (Services)", data.deep.components.services)}
+                  {infoRow("المستقبِلات (Receivers)", data.deep.components.receivers)}
+                  {infoRow("المزوّدات (Providers)", data.deep.components.providers)}
+                </div>
+              )}
+
+              {/* APIs مشبوهة (PE) */}
+              {data.deep.suspicious_apis && data.deep.suspicious_apis.length > 0 && (
+                <div className="panel">
+                  <h3>⚠️ واجهات APIs مشبوهة ({data.deep.suspicious_apis.length})</h3>
+                  {data.deep.suspicious_apis.map((a: any, i: number) => (
+                    <div key={i} style={{ padding: "10px", background: "#fef2f2", borderRadius: "6px", marginBottom: "6px", border: "1px solid #fecaca" }}>
+                      <div style={{ fontWeight: 600, color: "#991b1b", direction: "ltr", textAlign: "right" }}>{a.api}</div>
+                      <div style={{ fontSize: "13px" }}>{a.description}</div>
+                      <div style={{ fontSize: "11px", color: "#64748b", direction: "ltr", textAlign: "right" }}>{a.dll}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* المكتبات (PE) */}
+              {data.deep.imports && data.deep.imports.dlls?.length > 0 && (
+                <div className="panel">
+                  <h3>📚 المكتبات المستوردة ({data.deep.imports.total_dlls})</h3>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                    {data.deep.imports.dlls.map((d: string, i: number) => (
+                      <span key={i} style={{
+                        padding: "4px 10px", background: "#f1f5f9", borderRadius: "6px",
+                        fontSize: "12px", fontFamily: "monospace", direction: "ltr",
+                      }}>{d}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* المقاطع (PE) */}
+              {data.deep.sections && data.deep.sections.length > 0 && (
+                <div className="panel">
+                  <h3>📦 المقاطع (Sections)</h3>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", direction: "ltr" }}>
+                      <thead>
+                        <tr style={{ background: "#f1f5f9" }}>
+                          <th style={{ padding: "8px", textAlign: "left" }}>Name</th>
+                          <th style={{ padding: "8px", textAlign: "left" }}>Size</th>
+                          <th style={{ padding: "8px", textAlign: "left" }}>Entropy</th>
+                          <th style={{ padding: "8px", textAlign: "left" }}>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.deep.sections.map((s: any, i: number) => (
+                          <tr key={i} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                            <td style={{ padding: "8px", fontFamily: "monospace" }}>{s.name}</td>
+                            <td style={{ padding: "8px" }}>{s.size}</td>
+                            <td style={{ padding: "8px", color: s.suspicious ? "#dc2626" : "inherit" }}>{s.entropy}</td>
+                            <td style={{ padding: "8px" }}>{s.suspicious ? "⚠️ مشبوه" : "✅ عادي"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* المفاتيح المسرّبة (APK) */}
+              {data.deep.secrets && data.deep.secrets.length > 0 && (
+                <div className="panel" style={{ background: "#fef2f2", border: "1px solid #fecaca" }}>
+                  <h3>🔑 مفاتيح/رموز مسرّبة ({data.deep.secrets.length})</h3>
+                  {data.deep.secrets.map((s: any, i: number) => (
+                    <div key={i} style={{ padding: "8px", borderBottom: "1px solid #fecaca" }}>
+                      <div style={{ fontWeight: 600, color: "#991b1b" }}>🔑 {s.type}</div>
+                      <div style={{ fontSize: "12px", direction: "ltr", textAlign: "right", fontFamily: "monospace" }}>{s.value}</div>
+                      {s.file && <div style={{ fontSize: "11px", color: "#64748b", direction: "ltr", textAlign: "right" }}>{s.file}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* روابط و IPs ومفاتيح (PE) */}
+              {data.deep.strings && (
+                <>
+                  {data.deep.strings.secrets?.length > 0 && (
+                    <div className="panel" style={{ background: "#fef2f2", border: "1px solid #fecaca" }}>
+                      <h3>🔑 مفاتيح مسرّبة ({data.deep.strings.secrets.length})</h3>
+                      {data.deep.strings.secrets.map((s: any, i: number) => (
+                        <div key={i} style={{ padding: "8px", borderBottom: "1px solid #fecaca" }}>
+                          <div style={{ fontWeight: 600, color: "#991b1b" }}>🔑 {s.type}</div>
+                          <div style={{ fontSize: "12px", direction: "ltr", textAlign: "right", fontFamily: "monospace" }}>{s.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {data.deep.strings.urls?.length > 0 && (
+                    <div className="panel">
+                      <h3>🌐 روابط مضمّنة ({data.deep.strings.urls.length})</h3>
+                      {data.deep.strings.urls.map((u: string, i: number) => (
+                        <div key={i} style={{ padding: "4px 0", direction: "ltr", fontFamily: "monospace", fontSize: "12px", wordBreak: "break-all" }}>{u}</div>
+                      ))}
+                    </div>
+                  )}
+                  {data.deep.strings.ips?.length > 0 && (
+                    <div className="panel">
+                      <h3>📡 عناوين IP مضمّنة ({data.deep.strings.ips.length})</h3>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                        {data.deep.strings.ips.map((ip: string, i: number) => (
+                          <span key={i} style={{ padding: "4px 10px", background: "#f1f5f9", borderRadius: "6px", fontFamily: "monospace", fontSize: "12px", direction: "ltr" }}>{ip}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
+
+          {data.deep && data.deep.error && (
+            <div className="panel" style={{ background: "#fef2f2", border: "1px solid #fecaca" }}>
+              ⚠️ {data.deep.error}
+            </div>
+          )}
         </>
       )}
     </div>
