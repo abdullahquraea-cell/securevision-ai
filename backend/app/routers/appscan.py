@@ -8,7 +8,7 @@ import tempfile
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
-from ..auth import get_current_user  # ← إن اختلفت عندك، صحّح المسار كباقي الراوترات
+from app.routers.auth import get_current_user
 from ..scanner import appscan as scanner
 
 router = APIRouter(prefix="/appscan", tags=["appscan"])
