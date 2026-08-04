@@ -11,6 +11,7 @@ const menuItems = [
   { path: "code-scanner",     icon: "👨‍💻", label: "فحص الكود",       roles: ["admin", "analyst"] },
   { path: "/link-scanner",    icon: "🔗", label: "فاحص الروابط",     roles: ["admin", "analyst", "viewer"] },
   { path: "sqlmap-tester",    icon: "💉", label: "اختبار حقن SQL",   roles: ["admin", "analyst"] },
+    { path: "app-scanner",      icon: "📱", label: "فحص التطبيقات",    roles: ["admin", "analyst"] },
   { path: "recon",            icon: "🔎", label: "بصمة الموقع",      roles: ["admin", "analyst"] },
   { path: "file-discovery",   icon: "🗂️", label: "كشف الملفات",      roles: ["admin", "analyst"] },
   { path: "subdomains",       icon: "🌐", label: "النطاقات الفرعية", roles: ["admin", "analyst"] },

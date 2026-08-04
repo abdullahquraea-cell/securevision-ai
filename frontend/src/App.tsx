@@ -24,6 +24,7 @@ import SubscriptionSuccess from "./pages/SubscriptionSuccess";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import About from "./pages/About";
+import AppScanner from "./pages/AppScanner";
 
 
 function App() {
@@ -43,6 +44,7 @@ function App() {
           <Route path="/scans" element={<Scans />} />
           <Route path="/link-scanner" element={<LinkScanner />} />
           <Route path="sqlmap-tester" element={<SqlmapTester />} />
+          <Route path="app-scanner" element={<AppScanner />} />
           <Route path="/vulnerabilities" element={<Vulnerabilities />} />
           <Route path="/ai" element={<AI />} />
           <Route path="/reports" element={<Reports />} />
