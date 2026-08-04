@@ -37,6 +37,8 @@ function AppScanner() {
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [consent, setConsent] = useState(false);
+  const [appUrl, setAppUrl] = useState("");
+  const [urlConsent, setUrlConsent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [data, setData] = useState<any>(null);
@@ -62,6 +64,28 @@ function AppScanner() {
       return;
     }
     setFile(f);
+  };
+
+  const runUrlScan = async () => {
+    if (!appUrl.trim()) {
+      setError("⚠️ أدخل رابط التطبيق");
+      return;
+    }
+    if (!urlConsent) {
+      setError("⚠️ يجب تأكيد الإذن أوّلاً");
+      return;
+    }
+    setError("");
+    setData(null);
+    setLoading(true);
+    try {
+      const res = await api.post("/appscan/analyze-url", { url: appUrl.trim() });
+      setData(res.data);
+    } catch (e: any) {
+      setError("⚠️ " + (e.response?.data?.detail || e.response?.data?.error || "فشل الفحص"));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const runUpload = async () => {
@@ -213,22 +237,108 @@ function AppScanner() {
           </>
         )}
 
-        {/* ===== وضع رابط (سيُبنى في المرحلة 4) ===== */}
+        {/* ===== وضع رابط ===== */}
         {mode === "url" && (
-          <div style={{ padding: "30px", textAlign: "center", color: "#64748b" }}>
-            <div style={{ fontSize: "40px" }}>🔗</div>
-            <div style={{ fontWeight: 600, marginTop: "10px" }}>الفحص عبر الرابط قيد التطوير</div>
-            <div style={{ fontSize: "13px", marginTop: "6px" }}>
-              سيدعم Google Play / App Store / الروابط المباشرة في مرحلة قادمة.
+          <>
+            <input
+              type="text"
+              value={appUrl}
+              onChange={(e) => setAppUrl(e.target.value)}
+              placeholder="https://play.google.com/store/apps/details?id=com.whatsapp"
+              style={{
+                width: "100%", padding: "12px",
+                border: "1px solid #e2e8f0", borderRadius: "8px",
+                fontFamily: "inherit", direction: "ltr",
+              }}
+            />
+            <div style={{ fontSize: "12px", color: "#64748b", marginTop: "8px", lineHeight: 1.7 }}>
+              الأنواع المدعومة:<br />
+              • <b>Google Play</b>: <code style={{ direction: "ltr" }}>https://play.google.com/store/apps/details?id=...</code><br />
+              • <b>App Store</b>: <code style={{ direction: "ltr" }}>https://apps.apple.com/app/.../id...</code><br />
+              • <b>رابط مباشر</b> لـ APK / EXE / IPA / DMG / DEB (سيُنزَّل ويُحلَّل كاملاً)
             </div>
-          </div>
+
+            <label style={{
+              display: "flex", alignItems: "flex-start", gap: "8px",
+              marginTop: "14px", padding: "12px",
+              background: "#fffbeb", border: "1px solid #fde68a",
+              borderRadius: "8px", cursor: "pointer",
+            }}>
+              <input type="checkbox" checked={urlConsent} onChange={(e) => setUrlConsent(e.target.checked)} style={{ marginTop: "3px" }} />
+              <span style={{ fontSize: "13px", color: "#78350f" }}>
+                أُقرّ بأنّ لديّ الإذن بفحص هذا التطبيق، وأتحمّل المسؤولية القانونية الكاملة.
+              </span>
+            </label>
+
+            <button
+              onClick={runUrlScan}
+              disabled={loading || !appUrl.trim()}
+              style={{
+                marginTop: "15px", padding: "12px 30px",
+                background: loading || !appUrl.trim() ? "#94a3b8" : "#3b82f6",
+                color: "white", border: "none", borderRadius: "8px",
+                cursor: loading || !appUrl.trim() ? "not-allowed" : "pointer",
+                fontFamily: "inherit", fontSize: "15px", fontWeight: 600,
+              }}
+            >
+              {loading ? "⏳ جارٍ الفحص..." : "🚀 ابدأ الفحص"}
+            </button>
+          </>
         )}
 
         {error && <p style={{ color: "#dc2626", marginTop: "10px" }}>{error}</p>}
       </div>
 
-      {/* ========== النتائج ========== */}
-      {data && (
+      {/* ========== نتائج المتاجر (Play Store / App Store) ========== */}
+      {data && (data.source_type === "play_store" || data.source_type === "app_store") && (
+        <>
+          <div className="panel">
+            <h3>{data.source_type === "play_store" ? "🤖 معلومات Google Play" : "🍎 معلومات App Store"}</h3>
+            <div style={{ display: "flex", gap: "20px", alignItems: "center", padding: "10px 0" }}>
+              {data.metadata.icon_url && (
+                <img
+                  src={data.metadata.icon_url}
+                  alt=""
+                  style={{ width: "80px", height: "80px", borderRadius: "16px", objectFit: "cover" }}
+                />
+              )}
+              <div>
+                <div style={{ fontSize: "20px", fontWeight: 700 }}>{data.metadata.app_name || "غير معروف"}</div>
+                <div style={{ color: "#64748b" }}>{data.metadata.developer || data.metadata.seller || ""}</div>
+              </div>
+            </div>
+
+            {infoRow("المصدر", data.metadata.source)}
+            {data.metadata.package && infoRow("الحزمة", data.metadata.package)}
+            {data.metadata.bundle_id && infoRow("Bundle ID", data.metadata.bundle_id)}
+            {data.metadata.version && infoRow("النسخة", data.metadata.version)}
+            {data.metadata.price && infoRow("السعر", data.metadata.price)}
+            {data.metadata.rating && infoRow("التقييم", `⭐ ${data.metadata.rating}${data.metadata.rating_count ? ` (${data.metadata.rating_count})` : ""}`)}
+            {data.metadata.installs && infoRow("عدد التنزيلات", data.metadata.installs)}
+            {data.metadata.size_bytes && infoRow("الحجم", `${(Number(data.metadata.size_bytes) / 1024 / 1024).toFixed(1)} MB`)}
+            {data.metadata.min_ios && infoRow("أدنى iOS", data.metadata.min_ios)}
+            {data.metadata.genre && infoRow("الفئة", data.metadata.genre)}
+            {data.metadata.release_date && infoRow("تاريخ الإصدار الأوّل", String(data.metadata.release_date).slice(0, 10))}
+            {data.metadata.current_version_date && infoRow("آخر تحديث", String(data.metadata.current_version_date).slice(0, 10))}
+          </div>
+
+          {data.metadata.description && (
+            <div className="panel">
+              <h3>📝 الوصف</h3>
+              <p style={{ lineHeight: 1.8, color: "#334155", whiteSpace: "pre-wrap" }}>{data.metadata.description}</p>
+            </div>
+          )}
+
+          {data.note && (
+            <div className="panel" style={{ background: "#eff6ff", border: "1px solid #bfdbfe" }}>
+              ℹ️ {data.note}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ========== نتائج الملفّ (رفع أو رابط مباشر) ========== */}
+      {data && data.type_info && (
         <>
           <div className="panel">
             <h3>🪪 بطاقة تعريف التطبيق</h3>
@@ -240,6 +350,7 @@ function AppScanner() {
               </div>
             </div>
 
+            {data.source_url && infoRow("رابط المصدر", data.source_url)}
             {infoRow("اسم الملفّ", data.file_name)}
             {infoRow("الحجم", data.size_readable)}
             {infoRow("النوع (Type)", data.type_info.type)}
@@ -486,6 +597,13 @@ function AppScanner() {
             </div>
           )}
         </>
+      )}
+
+      {/* ========== خطأ في فحص الرابط ========== */}
+      {data && data.error && (
+        <div className="panel" style={{ background: "#fef2f2", border: "1px solid #fecaca" }}>
+          ⚠️ {data.error}
+        </div>
       )}
     </div>
   );

@@ -7,6 +7,7 @@ import os
 import tempfile
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from pydantic import BaseModel
 
 from app.routers.auth import get_current_user
 from ..scanner import appscan as scanner
@@ -66,3 +67,18 @@ async def upload_and_analyze(
                 os.unlink(tmp.name)
         except Exception:
             pass
+
+
+
+        class UrlScanRequest(BaseModel):
+            url: str
+
+
+@router.post("/analyze-url")
+async def analyze_url(
+    body: UrlScanRequest,
+    current_user=Depends(get_current_user),
+):
+    """يفحص تطبيقاً عبر رابط: Play Store / App Store / رابط مباشر."""
+    from ..scanner import url_scanner
+    return url_scanner.scan_url(body.url)
