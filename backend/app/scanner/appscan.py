@@ -181,7 +181,9 @@ def analyze_file(file_path: str, original_name: str = "") -> dict:
     elif entropy >= 7.0:
         entropy_note = "مرتفع"
 
-    # ---- التحليل العميق حسب النوع ----
+    hashes = compute_hashes(file_path)
+
+    # التحليل العميق حسب النوع
     deep = None
     t = type_info.get("type")
     try:
@@ -194,17 +196,34 @@ def analyze_file(file_path: str, original_name: str = "") -> dict:
     except Exception as e:
         deep = {"error": f"فشل التحليل العميق: {e}"}
 
-    return {
+    # VirusTotal
+    vt_result = None
+    try:
+        from . import virustotal
+        vt_result = virustotal.check_file_hash(hashes["sha256"])
+    except Exception as e:
+        vt_result = {"error": f"فشل VirusTotal: {e}"}
+
+    result = {
         "file_name": original_name or os.path.basename(file_path),
         "size_bytes": size,
         "size_readable": _human_size(size),
         "type_info": type_info,
-        "hashes": compute_hashes(file_path),
-        "entropy": {
-            "value": entropy,
-            "note": entropy_note,
-        },
+        "hashes": hashes,
+        "entropy": {"value": entropy, "note": entropy_note},
         "deep": deep,
-        "phase": 2,
-        "message": "التحليل الأوّلي + العميق اكتمل بنجاح.",
+        "virustotal": vt_result,
+        "phase": 5,
+        "message": "التحليل الكامل + VirusTotal + AI اكتمل بنجاح.",
     }
+
+    # AI Summary
+    ai_result = None
+    try:
+        from . import ai_summary
+        ai_result = ai_summary.summarize_scan(result)
+    except Exception as e:
+        ai_result = {"error": f"فشل AI: {e}"}
+
+    result["ai_analysis"] = ai_result
+    return result

@@ -376,7 +376,99 @@ function AppScanner() {
           <div className="panel" style={{ background: "#eff6ff", border: "1px solid #bfdbfe" }}>
             ℹ️ {data.message}
           </div>
+                    {/* ========== تحليل الذكاء الاصطناعي ========== */}
+          {data.ai_analysis && data.ai_analysis.enabled && data.ai_analysis.verdict && (
+            <div className="panel" style={{
+              background: "linear-gradient(135deg, #eef2ff, #f5f3ff)",
+              border: "2px solid #a5b4fc",
+            }}>
+              <h3>🤖 التحليل الذكيّ بالذكاء الاصطناعي</h3>
+              <div style={{ fontSize: "18px", fontWeight: 700, margin: "10px 0", color: "#3730a3" }}>
+                {data.ai_analysis.one_liner}
+              </div>
+              <p style={{ lineHeight: 1.8, color: "#334155" }}>{data.ai_analysis.summary}</p>
 
+              {data.ai_analysis.risks?.length > 0 && (
+                <>
+                  <h4 style={{ marginTop: "15px", color: "#991b1b" }}>⚠️ أبرز المخاطر</h4>
+                  <ul style={{ paddingInlineStart: "20px" }}>
+                    {data.ai_analysis.risks.map((r: string, i: number) => <li key={i} style={{ padding: "3px 0" }}>{r}</li>)}
+                  </ul>
+                </>
+              )}
+              {data.ai_analysis.recommendations?.length > 0 && (
+                <>
+                  <h4 style={{ marginTop: "15px", color: "#166534" }}>💡 التوصيات</h4>
+                  <ul style={{ paddingInlineStart: "20px" }}>
+                    {data.ai_analysis.recommendations.map((r: string, i: number) => <li key={i} style={{ padding: "3px 0" }}>{r}</li>)}
+                  </ul>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ========== نتائج VirusTotal ========== */}
+          {data.virustotal && data.virustotal.enabled && (
+            <div className="panel" style={{
+              background: data.virustotal.found && data.virustotal.malicious >= 2 ? "#fef2f2" :
+                          data.virustotal.found && data.virustotal.malicious === 1 ? "#fffbeb" :
+                          data.virustotal.found ? "#f0fdf4" : "#f8fafc",
+              border: `2px solid ${
+                data.virustotal.found && data.virustotal.malicious >= 2 ? "#fca5a5" :
+                data.virustotal.found && data.virustotal.malicious === 1 ? "#fcd34d" :
+                data.virustotal.found ? "#86efac" : "#cbd5e1"
+              }`,
+            }}>
+              <h3>🦠 نتائج VirusTotal (70+ محرّك)</h3>
+              {data.virustotal.error && <p style={{ color: "#dc2626" }}>⚠️ {data.virustotal.error}</p>}
+              {!data.virustotal.error && data.virustotal.found && (
+                <>
+                  <div style={{ fontSize: "40px", fontWeight: 700, textAlign: "center", margin: "10px 0" }}>
+                    {data.virustotal.malicious} / {data.virustotal.total_engines}
+                  </div>
+                  <div style={{ fontSize: "18px", fontWeight: 600, textAlign: "center", marginBottom: "15px" }}>
+                    الحكم: {data.virustotal.verdict}
+                  </div>
+
+                  {infoRow("عدد المحرّكات التي كشفت خطراً", data.virustotal.malicious)}
+                  {infoRow("مشبوه", data.virustotal.suspicious)}
+                  {infoRow("سليم", data.virustotal.harmless)}
+                  {infoRow("غير مكشوف", data.virustotal.undetected)}
+                  {data.virustotal.reputation !== undefined && infoRow("السمعة (Reputation)", data.virustotal.reputation)}
+
+                  {data.virustotal.flagged_engines?.length > 0 && (
+                    <>
+                      <h4 style={{ marginTop: "15px" }}>محرّكات صنّفته خطراً:</h4>
+                      {data.virustotal.flagged_engines.map((e: any, i: number) => (
+                        <div key={i} style={{ padding: "8px", background: "#fef2f2", borderRadius: "6px", marginBottom: "4px", border: "1px solid #fecaca" }}>
+                          <div style={{ fontWeight: 600, direction: "ltr", textAlign: "right" }}>{e.engine}</div>
+                          <div style={{ fontSize: "12px", color: "#991b1b", direction: "ltr", textAlign: "right" }}>{e.result}</div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+
+                  {data.virustotal.vt_link && (
+                    <div style={{ marginTop: "15px" }}>
+                      <a href={data.virustotal.vt_link} target="_blank" rel="noreferrer" style={{ color: "#3b82f6", textDecoration: "underline" }}>
+                        📄 التقرير الكامل على VirusTotal
+                      </a>
+                    </div>
+                  )}
+                </>
+              )}
+              {!data.virustotal.error && !data.virustotal.found && (
+                <p style={{ color: "#64748b" }}>ℹ️ {data.virustotal.note}</p>
+              )}
+            </div>
+          )}
+
+          {data.virustotal && data.virustotal.enabled === false && (
+            <div className="panel" style={{ background: "#f8fafc" }}>
+              <h3>🦠 VirusTotal</h3>
+              <p style={{ color: "#64748b" }}>ℹ️ {data.virustotal.note}</p>
+            </div>
+          )}
           {/* ========== التحليل العميق ========== */}
           {data.deep && !data.deep.error && (
             <>
