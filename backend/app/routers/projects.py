@@ -85,6 +85,9 @@ def create_project(
 # ==========================
 # Delete Project
 # ==========================
+# ==========================
+# Delete Project
+# ==========================
 
 @router.delete("/{project_id}")
 def delete_project(
@@ -92,6 +95,7 @@ def delete_project(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    from sqlalchemy import text
 
     project = db.query(Project).filter(
         Project.id == project_id
@@ -108,7 +112,6 @@ def delete_project(
     is_org_manager = getattr(current_user, "org_role", "member") in ("owner", "admin")
     is_project_owner = project.owner_id == current_user.id
 
-    # مسموح: مدير المنصّة، أو (نفس المؤسسة و[مالك المشروع أو مدير المؤسسة])
     allowed = is_platform_admin or (same_org and (is_project_owner or is_org_manager))
 
     if not allowed:
@@ -117,7 +120,33 @@ def delete_project(
             detail="Not allowed to delete this project"
         )
 
-    db.delete(project)
-    db.commit()
+    project_name = project.name
 
-    return {"message": "Project deleted"}
+    try:
+        # حذف السجلّات المرتبطة أوّلاً (يعمل حتّى لو ما فيه جدول)
+        for tbl in ("findings", "ai_analyses", "scans", "reports"):
+            try:
+                db.execute(
+                    text(f"DELETE FROM {tbl} WHERE project_id = :pid"),
+                    {"pid": project_id}
+                )
+            except Exception:
+                db.rollback()  # الجدول غير موجود أو ما فيه العمود — نتجاوز
+
+        # ثمّ حذف المشروع
+        db.delete(project)
+        db.commit()
+
+        log_activity(
+            db, current_user.id, current_user.username,
+            "delete_project", f"حذف مشروع: {project_name}"
+        )
+
+        return {"message": "Project deleted"}
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"فشل الحذف: {str(e)[:200]}"
+        )
