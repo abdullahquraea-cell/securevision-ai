@@ -82,10 +82,7 @@ def create_project(
     return new_project
 
 
-# ==========================
-# Delete Project
-# ==========================
-# ==========================
+# # ==========================
 # Delete Project
 # ==========================
 
@@ -122,18 +119,29 @@ def delete_project(
 
     project_name = project.name
 
-    try:
-        # حذف السجلّات المرتبطة أوّلاً (يعمل حتّى لو ما فيه جدول)
-        for tbl in ("findings", "ai_analyses", "scans", "reports"):
-            try:
-                db.execute(
-                    text(f"DELETE FROM {tbl} WHERE project_id = :pid"),
-                    {"pid": project_id}
-                )
-            except Exception:
-                db.rollback()  # الجدول غير موجود أو ما فيه العمود — نتجاوز
+    # دالّة مساعدة: تُنفّذ DELETE مع commit مستقلّ لكلّ عملية
+    def safe_delete(sql, params):
+        try:
+            db.execute(text(sql), params)
+            db.commit()
+        except Exception:
+            db.rollback()
 
-        # ثمّ حذف المشروع
+    # 1) حذف الـ findings عبر ربطها بفحوص المشروع (findings لا تحمل project_id مباشرة)
+    safe_delete(
+        "DELETE FROM findings WHERE scan_id IN (SELECT id FROM scans WHERE project_id = :pid)",
+        {"pid": project_id},
+    )
+
+    # 2) حذف بقيّة الجداول التي قد تحمل project_id مباشرة
+    for tbl in ("ai_analyses", "reports", "scans"):
+        safe_delete(
+            f"DELETE FROM {tbl} WHERE project_id = :pid",
+            {"pid": project_id},
+        )
+
+    # 3) حذف المشروع نفسه
+    try:
         db.delete(project)
         db.commit()
 
