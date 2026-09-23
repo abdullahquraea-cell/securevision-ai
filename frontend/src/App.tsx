@@ -58,10 +58,13 @@ function App() {
           <Route path="subscription" element={<Subscription />} />
           <Route path="about" element={<About />} />
           <Route path="/verify/:token" element={<Verify />} />
+          <Route path="/verify" element={<Verify />} />
           <Route path="organization" element={<Organization />} />
           <Route path="subscription/success" element={<SubscriptionSuccess />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
+          {/* المساران معاً مدعومان: مع token القديم، أو مع oobCode من Firebase */}
           <Route path="/reset-password/:token" element={<ResetPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
         </Route>
 
       </Routes>

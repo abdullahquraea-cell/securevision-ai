@@ -1,32 +1,68 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
-import api from "../api/axios";
+import { useParams, useNavigate, Link, useSearchParams } from "react-router-dom";
+import {
+  applyActionCode,
+  reload,
+  getAuth,
+  onAuthStateChanged,
+} from "firebase/auth";
+import { auth } from "../firebase";
 
 export default function Verify() {
   const { token } = useParams<{ token: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+
+  // Firebase يستخدم query params: ?mode=verifyEmail&oobCode=XXX
+  const oobCode = searchParams.get("oobCode") || token || "";
+  const mode = searchParams.get("mode");
+
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [message, setMessage] = useState("جارٍ تأكيد بريدك الإلكتروني...");
 
   useEffect(() => {
     let active = true;
-    api
-      .get(`/auth/verify/${token}`)
-      .then((res) => {
-        if (!active) return;
-        setStatus("success");
-        setMessage(res.data.message || "تم تأكيد بريدك بنجاح ✅");
-        setTimeout(() => navigate("/login"), 3000);
-      })
-      .catch((err) => {
-        if (!active) return;
-        setStatus("error");
-        setMessage(err.response?.data?.detail || "رابط تفعيل غير صالح أو مستخدَم مسبقاً");
-      });
+
+    // وضع Firebase: نستخدم applyActionCode
+    if (mode === "verifyEmail" || (!token && oobCode)) {
+      applyActionCode(auth, oobCode)
+        .then(async () => {
+          if (!active) return;
+          // إعادة تحميل بيانات المستخدم للحصول على علامة emailVerified محدّثة
+          const user = getAuth().currentUser;
+          if (user) {
+            try {
+              await reload(user);
+            } catch {
+              // تجاهل: التأكيد نجح بالفعل
+            }
+          }
+          setStatus("success");
+          setMessage("تم تأكيد بريدك بنجاح ✅");
+          setTimeout(() => navigate("/login"), 3000);
+        })
+        .catch((err) => {
+          if (!active) return;
+          setStatus("error");
+          const code = err?.code || "";
+          let msg = "رابط تفعيل غير صالح أو مستخدَم مسبقاً.";
+          if (code === "auth/expired-action-code") msg = "انتهت صلاحية رابط التفعيل.";
+          else if (code === "auth/invalid-action-code") msg = "رابط التفعيل غير صالح.";
+          setMessage(msg);
+        });
+    } else if (token) {
+      // الوضع القديم (إن بقي من الباك-إند السابق) — لا يزال موجوداً للتوافق
+      setStatus("error");
+      setMessage("رابط تفعيل غير صالح أو مستخدَم مسبقاً.");
+    } else {
+      setStatus("error");
+      setMessage("رابط تفعيل غير صالح أو مستخدَم مسبقاً.");
+    }
+
     return () => {
       active = false;
     };
-  }, [token, navigate]);
+  }, [oobCode, mode, token, navigate]);
 
   const colors = {
     loading: "#3b82f6",

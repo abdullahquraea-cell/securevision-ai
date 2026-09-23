@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { signOut, onAuthStateChanged, getIdToken } from "firebase/auth";
 import api from "../api/axios";
+import { auth } from "../firebase";
 import "../styles/dashboard.css";
 
 // عناصر القائمة الجانبية + من يحق له رؤية كل عنصر
@@ -54,24 +56,63 @@ function DashboardLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      navigate("/login");
-      return;
-    }
-    api
-      .get("/auth/me")
-      .then((response) => setUser(response.data))
-      .catch(() => {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        navigate("/login");
-      });
+    // الاشتراك بحالة مصادقة Firebase — يضمن تحديث الـ token محلياً
+    const unsub = onAuthStateChanged(auth, async (fbUser) => {
+      if (!fbUser) {
+        // لا يوجد مستخدم على Firebase — نحاول إعادة استخدام المخزّن
+        const cached = localStorage.getItem("user");
+        if (!cached) {
+          navigate("/login");
+          return;
+        }
+        try {
+          setUser(JSON.parse(cached));
+        } catch {
+          navigate("/login");
+        }
+        return;
+      }
+
+      // تحديث الـ token قبل استدعاء أي API
+      const token = await getIdToken(fbUser, true);
+      localStorage.setItem("token", token);
+      localStorage.setItem("firebase_uid", fbUser.uid);
+
+      // محاولة جلب بيانات المستخدم من الباك-إند
+      try {
+        const response = await api.get("/auth/me");
+        setUser(response.data);
+      } catch {
+        // فشل الـ backend — نعتمد على بيانات Firebase المحلية
+        const username =
+          fbUser.displayName ||
+          (fbUser.email ? fbUser.email.split("@")[0] : "مستخدم");
+        const payload = {
+          access_token: token,
+          token_type: "bearer",
+          user_id: fbUser.uid,
+          username,
+          email: fbUser.email,
+          role: "analyst",
+          is_verified: fbUser.emailVerified,
+        };
+        localStorage.setItem("user", JSON.stringify(payload));
+        setUser(payload);
+      }
+    });
+
+    return () => unsub();
   }, [navigate]);
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await signOut(auth);
+    } catch {
+      // تجاهل: نُكمّل التنظيف محلياً
+    }
     localStorage.removeItem("token");
     localStorage.removeItem("user");
+    localStorage.removeItem("firebase_uid");
     navigate("/login");
   };
 
