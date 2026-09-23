@@ -17,6 +17,14 @@ services:
       - db
 
   web:
+    admin:
+    build:
+      context: ./admin
+      args:
+        VITE_API_URL: /api
+    restart: unless-stopped
+    depends_on:
+      - backend
     build:
       context: ./frontend
       args:

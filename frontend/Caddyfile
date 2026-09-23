@@ -1,13 +1,21 @@
 {$SITE_ADDRESS} {
     encode gzip
-
     handle_path /api/* {
         reverse_proxy backend:8000
     }
-
     handle {
         root * /srv
         try_files {path} /index.html
         file_server
+    }
+}
+
+admin.{$SITE_ADDRESS} {
+    encode gzip
+    handle_path /api/* {
+        reverse_proxy backend:8000
+    }
+    handle {
+        reverse_proxy admin:80
     }
 }
