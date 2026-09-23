@@ -16,8 +16,7 @@ services:
     depends_on:
       - db
 
-  web:
-    admin:
+  admin:
     build:
       context: ./admin
       args:
@@ -25,6 +24,8 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+
+  web:
     build:
       context: ./frontend
       args:
@@ -37,6 +38,7 @@ services:
       - "443:443"
     depends_on:
       - backend
+      - admin
     volumes:
       - caddy_data:/data
       - caddy_config:/config
