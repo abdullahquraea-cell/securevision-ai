@@ -18,7 +18,7 @@ from app.routers import (
     auth, projects, scans, findings, ai, reports,
     users, activity, settings as settings_router, stats,
     urlcheck, contact,
-    sqlmaptest,recon,filediscovery,subdomains,codescan,subscription,organizations,appscan,
+    sqlmaptest,recon,filediscovery,subdomains,codescan,subscription,organizations,appscan,admin,
 )
 
 
@@ -87,6 +87,7 @@ app.include_router(codescan.router)
 app.include_router(subscription.router)
 app.include_router(organizations.router)
 app.include_router(appscan.router)
+app.include_router(admin.router)
 
 
 
