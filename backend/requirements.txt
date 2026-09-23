@@ -56,3 +56,6 @@ uvicorn==0.50.2
 # Firebase Admin SDK (للتحقق من Firebase ID Tokens على الباك-إند)
 firebase-admin==6.5.0
 
+
+# مكتبات عربية لتوليد PDF
+arabic-reshaper==3.0.1
