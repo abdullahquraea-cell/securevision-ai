@@ -72,7 +72,6 @@ function AdminDashboard() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#0f172a", color: "#e2e8f0" }}>
-      {/* الشريط العلوي */}
       <div style={{
         background: "#1e293b", borderBottom: "1px solid #334155",
         padding: "14px 24px", display: "flex", justifyContent: "space-between", alignItems: "center",
@@ -99,7 +98,6 @@ function AdminDashboard() {
         </div>
       </div>
 
-      {/* المحتوى */}
       <div style={{ padding: "30px 24px", maxWidth: "1400px", margin: "0 auto" }}>
         <h1 style={{ color: "#f8fafc", fontSize: "26px", marginBottom: "6px" }}>📊 نظرة عامّة</h1>
         <p style={{ color: "#94a3b8", fontSize: "13px", marginBottom: "24px" }}>
@@ -121,19 +119,26 @@ function AdminDashboard() {
           </div>
         ) : stats && (
           <>
-            {/* إجراءات سريعة */}
-                           </button>
+            <Section title="⚡ إجراءات سريعة">
+              <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                <button
+                  onClick={() => window.location.href = "/users"}
+                  style={{
+                    padding: "14px 24px",
+                    background: "linear-gradient(135deg, #3b82f6, #2563eb)",
+                    color: "#fff", border: "none", borderRadius: "10px",
+                    cursor: "pointer", fontSize: "14px", fontWeight: 600,
+                  }}
+                >
+                  👥 إدارة المستخدمين ({stats.users.total})
+                </button>
                 <button
                   onClick={() => window.location.href = "/organizations"}
                   style={{
                     padding: "14px 24px",
                     background: "linear-gradient(135deg, #8b5cf6, #6d28d9)",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: "10px",
-                    cursor: "pointer",
-                    fontSize: "14px",
-                    fontWeight: 600,
+                    color: "#fff", border: "none", borderRadius: "10px",
+                    cursor: "pointer", fontSize: "14px", fontWeight: 600,
                   }}
                 >
                   🏢 إدارة المنظّمات ({stats.organizations.total})
@@ -141,7 +146,6 @@ function AdminDashboard() {
               </div>
             </Section>
 
-            {/* الصفّ الأوّل — المستخدمون / المنظّمات / المشاريع / الفحوص */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px", marginBottom: "24px" }}>
               <BigStat icon="👥" label="المستخدمون" value={stats.users.total} sub={`${stats.users.new_this_week} جديد هذا الأسبوع`} color="#3b82f6" />
               <BigStat icon="🏢" label="المنظّمات" value={stats.organizations.total} sub="—" color="#8b5cf6" />
@@ -149,7 +153,6 @@ function AdminDashboard() {
               <BigStat icon="🔍" label="الفحوص" value={stats.scans.total} sub={`${stats.scans.today} اليوم`} color="#10b981" />
             </div>
 
-            {/* رسم نموّ المستخدمين */}
             <Section title="📈 نموّ المستخدمين (آخر 30 يوم)">
               {growth.length === 0 ? (
                 <p style={{ color: "#64748b", padding: "20px 0" }}>لا توجد بيانات كافية</p>
@@ -158,7 +161,6 @@ function AdminDashboard() {
               )}
             </Section>
 
-            {/* الفحوص التفصيلية */}
             <Section title="🔍 تفاصيل الفحوص">
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "12px" }}>
                 <MiniStat label="مكتملة" value={stats.scans.completed} color="#10b981" />
@@ -169,7 +171,6 @@ function AdminDashboard() {
               </div>
             </Section>
 
-            {/* الثغرات حسب الخطورة */}
             <Section title="🐞 الثغرات حسب الخطورة">
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "12px" }}>
                 <MiniStat label="حرجة" value={stats.findings.critical} color="#dc2626" />
@@ -180,7 +181,6 @@ function AdminDashboard() {
               </div>
             </Section>
 
-            {/* الاشتراكات */}
             <Section title="💳 توزيع الاشتراكات">
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
                 <PlanCard name="Free" count={stats.subscriptions.free} color="#64748b" />
@@ -189,7 +189,6 @@ function AdminDashboard() {
               </div>
             </Section>
 
-            {/* المستخدمون التفصيليون */}
             <Section title="👥 تفاصيل المستخدمين">
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "12px" }}>
                 <MiniStat label="الإجمالي" value={stats.users.total} color="#3b82f6" />
@@ -204,8 +203,6 @@ function AdminDashboard() {
     </div>
   );
 }
-
-// ============ Reusable Components ============
 
 function BigStat({ icon, label, value, sub, color }: { icon: string; label: string; value: number; sub: string; color: string }) {
   return (
