@@ -71,25 +71,6 @@ function AdminDashboard() {
   if (!user) return null;
 
   return (
-                <Section title="⚡ إجراءات سريعة">
-              <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-                <button
-                  onClick={() => window.location.href = "/users"}
-                  style={{
-                    padding: "14px 24px",
-                    background: "linear-gradient(135deg, #3b82f6, #2563eb)",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: "10px",
-                    cursor: "pointer",
-                    fontSize: "14px",
-                    fontWeight: 600,
-                  }}
-                >
-                  👥 إدارة المستخدمين ({stats.users.total})
-                </button>
-              </div>
-            </Section>
     <div style={{ minHeight: "100vh", background: "#0f172a", color: "#e2e8f0" }}>
       {/* الشريط العلوي */}
       <div style={{
@@ -140,6 +121,27 @@ function AdminDashboard() {
           </div>
         ) : stats && (
           <>
+            {/* إجراءات سريعة */}
+            <Section title="⚡ إجراءات سريعة">
+              <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                <button
+                  onClick={() => window.location.href = "/users"}
+                  style={{
+                    padding: "14px 24px",
+                    background: "linear-gradient(135deg, #3b82f6, #2563eb)",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "10px",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    fontWeight: 600,
+                  }}
+                >
+                  👥 إدارة المستخدمين ({stats.users.total})
+                </button>
+              </div>
+            </Section>
+
             {/* الصفّ الأوّل — المستخدمون / المنظّمات / المشاريع / الفحوص */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px", marginBottom: "24px" }}>
               <BigStat icon="👥" label="المستخدمون" value={stats.users.total} sub={`${stats.users.new_this_week} جديد هذا الأسبوع`} color="#3b82f6" />
