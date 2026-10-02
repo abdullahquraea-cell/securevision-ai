@@ -301,3 +301,206 @@ def user_activity(
         except Exception:
             pass
         return []
+
+
+        # ==========================
+# Organizations Management
+# ==========================
+
+@router.get("/organizations")
+def list_organizations(
+    search: Optional[str] = None,
+    plan: Optional[str] = None,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """قائمة المنظّمات مع إحصائيات."""
+    try:
+        q = "SELECT id, name, owner_id, plan, created_at FROM organizations"
+        params: dict = {}
+        conds = []
+        if search:
+            conds.append("name ILIKE :s")
+            params["s"] = f"%{search}%"
+        if plan:
+            conds.append("plan = :p")
+            params["p"] = plan
+        if conds:
+            q += " WHERE " + " AND ".join(conds)
+        q += " ORDER BY id DESC"
+
+        rows = db.execute(text(q), params).fetchall()
+        orgs = []
+        for r in rows:
+            oid = r[0]
+            member_count = _safe_count(db, "SELECT COUNT(*) FROM users WHERE organization_id = :o", {"o": oid})
+            project_count = _safe_count(db, "SELECT COUNT(*) FROM projects WHERE organization_id = :o", {"o": oid})
+            scan_count = _safe_count(db,
+                "SELECT COUNT(*) FROM scans s JOIN projects p ON s.project_id = p.id WHERE p.organization_id = :o",
+                {"o": oid}
+            )
+            owner_name = ""
+            try:
+                owner_row = db.execute(
+                    text("SELECT username FROM users WHERE id = :uid"),
+                    {"uid": r[2]}
+                ).fetchone()
+                owner_name = owner_row[0] if owner_row else "—"
+            except Exception:
+                db.rollback()
+
+            orgs.append({
+                "id": oid,
+                "name": r[1],
+                "owner_id": r[2],
+                "owner_name": owner_name,
+                "plan": r[3] or "free",
+                "created_at": str(r[4]) if r[4] else None,
+                "member_count": member_count,
+                "project_count": project_count,
+                "scan_count": scan_count,
+            })
+
+        return {"total": len(orgs), "organizations": orgs}
+    except Exception as e:
+        try: db.rollback()
+        except: pass
+        raise HTTPException(status_code=500, detail=f"فشل التحميل: {str(e)[:200]}")
+
+
+@router.get("/organizations/{org_id}/members")
+def organization_members(
+    org_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """أعضاء منظّمة معيّنة."""
+    try:
+        rows = db.execute(
+            text("""
+                SELECT id, username, email, role, is_verified, org_role, created_at
+                FROM users WHERE organization_id = :o
+                ORDER BY id DESC
+            """),
+            {"o": org_id}
+        ).fetchall()
+        return [
+            {
+                "id": r[0], "username": r[1], "email": r[2],
+                "role": r[3], "is_verified": bool(r[4]),
+                "org_role": r[5], "created_at": str(r[6]) if r[6] else None,
+            }
+            for r in rows
+        ]
+    except Exception:
+        try: db.rollback()
+        except: pass
+        return []
+
+
+class OrgUpdate(BaseModel):
+    name: Optional[str] = None
+    plan: Optional[str] = None
+
+
+@router.patch("/organizations/{org_id}")
+def update_organization(
+    org_id: int,
+    data: OrgUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """تعديل اسم المنظّمة أو خطّتها."""
+    try:
+        updates = []
+        params = {"oid": org_id}
+        if data.name is not None:
+            updates.append("name = :n")
+            params["n"] = data.name
+        if data.plan is not None:
+            updates.append("plan = :p")
+            params["p"] = data.plan
+
+        if not updates:
+            raise HTTPException(status_code=400, detail="لا شيء للتعديل")
+
+        db.execute(
+            text(f"UPDATE organizations SET {', '.join(updates)} WHERE id = :oid"),
+            params
+        )
+        db.commit()
+
+        # تحديث خطّة الاشتراك لكل أعضاء المنظّمة لو تغيّرت الخطّة
+        if data.plan is not None:
+            try:
+                db.execute(
+                    text("UPDATE users SET subscription_plan = :p WHERE organization_id = :o"),
+                    {"p": data.plan, "o": org_id}
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
+
+        return {"message": "تمّ التحديث", "org_id": org_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"فشل التحديث: {str(e)[:200]}")
+
+
+@router.delete("/organizations/{org_id}")
+def delete_organization(
+    org_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """حذف منظّمة مع كلّ مشاريعها وفحوصها.
+    الأعضاء لن يُحذفوا — فقط ستُفصل عضويّتهم عن المنظّمة."""
+    try:
+        row = db.execute(
+            text("SELECT name FROM organizations WHERE id = :o"),
+            {"o": org_id}
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="المنظّمة غير موجودة")
+        org_name = row[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"خطأ: {str(e)[:200]}")
+
+    def safe_execute(sql: str, params: dict):
+        try:
+            db.execute(text(sql), params)
+            db.commit()
+        except Exception:
+            db.rollback()
+
+    # 1) حذف findings المرتبطة بفحوص مشاريع المنظّمة
+    safe_execute(
+        "DELETE FROM findings WHERE scan_id IN "
+        "(SELECT s.id FROM scans s JOIN projects p ON s.project_id = p.id WHERE p.organization_id = :o)",
+        {"o": org_id}
+    )
+    # 2) حذف الفحوص
+    safe_execute(
+        "DELETE FROM scans WHERE project_id IN (SELECT id FROM projects WHERE organization_id = :o)",
+        {"o": org_id}
+    )
+    # 3) حذف المشاريع
+    safe_execute("DELETE FROM projects WHERE organization_id = :o", {"o": org_id})
+    # 4) حذف جدول العضوية
+    safe_execute("DELETE FROM organization_members WHERE organization_id = :o", {"o": org_id})
+    # 5) فصل الأعضاء (لا نحذفهم)
+    safe_execute("UPDATE users SET organization_id = NULL, org_role = NULL WHERE organization_id = :o", {"o": org_id})
+
+    # 6) حذف المنظّمة
+    try:
+        db.execute(text("DELETE FROM organizations WHERE id = :o"), {"o": org_id})
+        db.commit()
+        return {"message": f"تمّ حذف منظّمة {org_name}"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"فشل الحذف: {str(e)[:200]}")

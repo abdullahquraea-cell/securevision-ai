@@ -122,13 +122,12 @@ function AdminDashboard() {
         ) : stats && (
           <>
             {/* إجراءات سريعة */}
-            <Section title="⚡ إجراءات سريعة">
-              <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                           </button>
                 <button
-                  onClick={() => window.location.href = "/users"}
+                  onClick={() => window.location.href = "/organizations"}
                   style={{
                     padding: "14px 24px",
-                    background: "linear-gradient(135deg, #3b82f6, #2563eb)",
+                    background: "linear-gradient(135deg, #8b5cf6, #6d28d9)",
                     color: "#fff",
                     border: "none",
                     borderRadius: "10px",
@@ -137,7 +136,7 @@ function AdminDashboard() {
                     fontWeight: 600,
                   }}
                 >
-                  👥 إدارة المستخدمين ({stats.users.total})
+                  🏢 إدارة المنظّمات ({stats.organizations.total})
                 </button>
               </div>
             </Section>
