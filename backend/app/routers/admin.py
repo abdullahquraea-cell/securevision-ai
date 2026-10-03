@@ -255,7 +255,7 @@ def delete_user(
     safe_execute("DELETE FROM projects WHERE owner_id = :uid", {"uid": user_id})
 
     for tbl, col in [
-        ("activity_logs", "user_id"),
+        ("activities", "user_id"),
         ("subscriptions", "user_id"),
         ("organization_members", "user_id"),
         ("ai_analyses", "user_id"),
@@ -283,8 +283,8 @@ def user_activity(
     try:
         rows = db.execute(
             text("""
-                SELECT id, action, description, created_at
-                FROM activity_logs
+                SELECT id, action, details, created_at
+                FROM activities
                 WHERE user_id = :uid
                 ORDER BY created_at DESC
                 LIMIT :limit
@@ -292,7 +292,7 @@ def user_activity(
             {"uid": user_id, "limit": limit},
         ).fetchall()
         return [
-            {"id": r[0], "action": r[1], "description": r[2], "created_at": str(r[3])}
+            {"id": r[0], "action": r[1], "description": r[2] or "", "created_at": str(r[3]) if r[3] else None}
             for r in rows
         ]
     except Exception:
@@ -301,6 +301,137 @@ def user_activity(
         except Exception:
             pass
         return []
+
+
+# ==========================
+# Activity Log (Global)
+# ==========================
+
+@router.get("/activity")
+def get_all_activity(
+    limit: int = 100,
+    offset: int = 0,
+    action: str | None = None,
+    user_id: int | None = None,
+    search: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """سجلّ النشاط العامّ لكلّ النظام (admin only)."""
+    try:
+        where_clauses = []
+        params: dict = {"limit": limit, "offset": offset}
+
+        if action:
+            where_clauses.append("a.action = :action")
+            params["action"] = action
+        if user_id:
+            where_clauses.append("a.user_id = :user_id")
+            params["user_id"] = user_id
+        if search:
+            where_clauses.append("(a.details ILIKE :search OR a.username ILIKE :search OR a.action ILIKE :search)")
+            params["search"] = f"%{search}%"
+        if date_from:
+            where_clauses.append("a.created_at >= :date_from")
+            params["date_from"] = date_from
+        if date_to:
+            where_clauses.append("a.created_at <= :date_to")
+            params["date_to"] = date_to
+
+        where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+        total_row = db.execute(
+            text(f"SELECT COUNT(*) FROM activities a {where_sql}"),
+            params,
+        ).fetchone()
+        total = total_row[0] if total_row else 0
+
+        rows = db.execute(
+            text(f"""
+                SELECT a.id, a.action, a.details, a.created_at,
+                       a.user_id, a.username
+                FROM activities a
+                {where_sql}
+                ORDER BY a.created_at DESC
+                LIMIT :limit OFFSET :offset
+            """),
+            params,
+        ).fetchall()
+
+        activities = [
+            {
+                "id": r[0],
+                "action": r[1],
+                "details": r[2] or "",
+                "created_at": str(r[3]) if r[3] else None,
+                "user_id": r[4],
+                "username": r[5] or "—",
+            }
+            for r in rows
+        ]
+
+        actions_rows = db.execute(
+            text("SELECT DISTINCT action FROM activities WHERE action IS NOT NULL ORDER BY action")
+        ).fetchall()
+        action_types = [r[0] for r in actions_rows]
+
+        return {
+            "total": total,
+            "activities": activities,
+            "action_types": action_types,
+        }
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"فشل جلب السجلّ: {str(e)[:200]}")
+
+
+@router.get("/activity/stats")
+def activity_stats(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """إحصائيّات سريعة علا النشاط."""
+    try:
+        total = db.execute(text("SELECT COUNT(*) FROM activities")).scalar() or 0
+        last_24h = db.execute(
+            text("SELECT COUNT(*) FROM activities WHERE created_at >= NOW() - INTERVAL '24 hours'")
+        ).scalar() or 0
+        last_7d = db.execute(
+            text("SELECT COUNT(*) FROM activities WHERE created_at >= NOW() - INTERVAL '7 days'")
+        ).scalar() or 0
+        last_30d = db.execute(
+            text("SELECT COUNT(*) FROM activities WHERE created_at >= NOW() - INTERVAL '30 days'")
+        ).scalar() or 0
+
+        by_action_rows = db.execute(
+            text("""
+                SELECT action, COUNT(*) as cnt
+                FROM activities
+                WHERE created_at >= NOW() - INTERVAL '30 days'
+                GROUP BY action
+                ORDER BY cnt DESC
+                LIMIT 10
+            """)
+        ).fetchall()
+
+        return {
+            "total": total,
+            "last_24h": last_24h,
+            "last_7d": last_7d,
+            "last_30d": last_30d,
+            "by_action": [{"action": r[0], "count": r[1]} for r in by_action_rows],
+        }
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return {"total": 0, "last_24h": 0, "last_7d": 0, "last_30d": 0, "by_action": []}
 
 
         # ==========================

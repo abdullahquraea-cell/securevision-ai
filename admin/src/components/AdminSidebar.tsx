@@ -11,6 +11,7 @@ const navItems: NavItem[] = [
   { path: "/users", label: "المستخدمون", icon: "👥" },
   { path: "/organizations", label: "المنظّمات", icon: "🏢" },
   { path: "/subscriptions", label: "الاشتراكات والإيرادات", icon: "💳" },
+  { path: "/activity", label: "سجلّ النشاط", icon: "📜" },
 ];
 
 export default function AdminSidebar() {
