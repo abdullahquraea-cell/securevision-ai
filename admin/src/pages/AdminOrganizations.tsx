@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
+import AdminLayout from "../components/AdminLayout";
 
 type Org = {
   id: number;
@@ -110,162 +111,298 @@ function AdminOrganizations() {
   if (!me) return null;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0f172a", color: "#e2e8f0" }}>
-      <div style={topBar}>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <button onClick={() => navigate("/dashboard")} style={{
-            background: "transparent", border: "1px solid #334155", color: "#94a3b8",
-            padding: "6px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "13px",
-          }}>← رجوع</button>
-          <span style={{ fontSize: "20px" }}>🏢</span>
-          <div style={{ fontWeight: 700, color: "#f8fafc" }}>إدارة المنظّمات</div>
-        </div>
-        <div style={{ color: "#94a3b8", fontSize: "13px" }}>👤 {me.username}</div>
-      </div>
-
-      <div style={{ padding: "24px", maxWidth: "1400px", margin: "0 auto" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px", marginBottom: "16px" }}>
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="🔍 بحث باسم المنظّمة..." style={input} />
-          <select value={planFilter} onChange={(e) => setPlanFilter(e.target.value)} style={input}>
+    <AdminLayout title="إدارة المنظّمات" subtitle={`الإجمالي: ${total} منظّمة`}>
+      {/* شريط الفلاتر */}
+      <div style={styles.filtersCard}>
+        <div style={styles.filtersGrid}>
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="🔍 بحث باسم المنظّمة..." style={styles.input} />
+          <select value={planFilter} onChange={(e) => setPlanFilter(e.target.value)} style={styles.input}>
             <option value="">كلّ الخطط</option>
             <option value="free">Free</option>
             <option value="pro">Pro</option>
             <option value="enterprise">Enterprise</option>
           </select>
-          <button onClick={loadOrgs} style={btnPrimary}>🔎 تطبيق</button>
-        </div>
-
-        {msg && (
-          <div style={{
-            padding: "10px 14px", marginBottom: "14px", borderRadius: "8px",
-            background: msg.startsWith("⚠️") ? "#7f1d1d33" : "#14532d33",
-            border: `1px solid ${msg.startsWith("⚠️") ? "#dc2626" : "#16a34a"}`,
-            color: msg.startsWith("⚠️") ? "#fca5a5" : "#86efac", fontSize: "13px",
-          }}>{msg}</div>
-        )}
-
-        <div style={{ color: "#94a3b8", fontSize: "13px", marginBottom: "10px" }}>
-          الإجمالي: {total} منظّمة
-        </div>
-
-        <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: "12px", overflow: "hidden" }}>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "900px" }}>
-              <thead>
-                <tr style={{ background: "#0f172a" }}>
-                  <th style={th}>#</th>
-                  <th style={th}>اسم المنظّمة</th>
-                  <th style={th}>المالك</th>
-                  <th style={th}>الخطّة</th>
-                  <th style={th}>الأعضاء</th>
-                  <th style={th}>المشاريع</th>
-                  <th style={th}>الفحوص</th>
-                  <th style={th}>التاريخ</th>
-                  <th style={th}>إجراءات</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr><td colSpan={9} style={{ padding: "40px", textAlign: "center", color: "#64748b" }}>⏳ جارٍ التحميل...</td></tr>
-                ) : orgs.length === 0 ? (
-                  <tr><td colSpan={9} style={{ padding: "40px", textAlign: "center", color: "#64748b" }}>لا توجد منظّمات</td></tr>
-                ) : orgs.map((o) => (
-                  <tr key={o.id} style={{ borderTop: "1px solid #334155" }}>
-                    <td style={td}>{o.id}</td>
-                    <td style={{ ...td, fontWeight: 600 }}>{o.name}</td>
-                    <td style={{ ...td, fontSize: "12px", color: "#94a3b8" }}>{o.owner_name}</td>
-                    <td style={td}><span style={badge(o.plan === "pro" ? "#3b82f6" : o.plan === "enterprise" ? "#8b5cf6" : "#64748b")}>{o.plan}</span></td>
-                    <td style={{ ...td, textAlign: "center", fontFamily: "monospace", color: "#3b82f6" }}>{o.member_count}</td>
-                    <td style={{ ...td, textAlign: "center", fontFamily: "monospace", color: "#06b6d4" }}>{o.project_count}</td>
-                    <td style={{ ...td, textAlign: "center", fontFamily: "monospace", color: "#10b981" }}>{o.scan_count}</td>
-                    <td style={{ ...td, fontSize: "11px", color: "#64748b", direction: "ltr", textAlign: "right" }}>
-                      {o.created_at ? o.created_at.slice(0, 10) : "—"}
-                    </td>
-                    <td style={td}>
-                      <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-                        <button onClick={() => openEdit(o)} style={btnMini("#3b82f6")}>✏️</button>
-                        <button onClick={() => showMembers(o)} style={btnMini("#8b5cf6")}>👥</button>
-                        <button onClick={() => deleteOrg(o)} style={btnMini("#dc2626")}>🗑️</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <button onClick={loadOrgs} style={styles.btnPrimary}>🔎 تطبيق</button>
         </div>
       </div>
 
+      {/* رسالة */}
+      {msg && (
+        <div style={{
+          padding: "12px 16px",
+          marginBottom: 16,
+          borderRadius: 10,
+          background: msg.startsWith("⚠️") ? "#fef2f2" : "#f0fdf4",
+          border: `1px solid ${msg.startsWith("⚠️") ? "#fecaca" : "#bbf7d0"}`,
+          color: msg.startsWith("⚠️") ? "#dc2626" : "#16a34a",
+          fontSize: 14,
+          fontWeight: 500,
+        }}>{msg}</div>
+      )}
+
+      {/* الجدول */}
+      <div style={styles.tableCard}>
+        <div style={{ overflowX: "auto" }}>
+          <table style={styles.table}>
+            <thead>
+              <tr style={styles.tableHeadRow}>
+                <th style={styles.th}>#</th>
+                <th style={styles.th}>اسم المنظّمة</th>
+                <th style={styles.th}>المالك</th>
+                <th style={styles.th}>الخطّة</th>
+                <th style={styles.th}>الأعضاء</th>
+                <th style={styles.th}>المشاريع</th>
+                <th style={styles.th}>الفحوص</th>
+                <th style={styles.th}>التاريخ</th>
+                <th style={styles.th}>إجراءات</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={9} style={styles.emptyCell}>⏳ جارٍ التحميل...</td></tr>
+              ) : orgs.length === 0 ? (
+                <tr><td colSpan={9} style={styles.emptyCell}>لا توجد منظّمات</td></tr>
+              ) : orgs.map((o) => (
+                <tr key={o.id} style={styles.tableRow}>
+                  <td style={styles.td}>{o.id}</td>
+                  <td style={{ ...styles.td, fontWeight: 600, color: "#0f172a" }}>{o.name}</td>
+                  <td style={{ ...styles.td, fontSize: 13, color: "#64748b" }}>{o.owner_name}</td>
+                  <td style={styles.td}>
+                    <span style={badge(o.plan === "pro" ? "#3b82f6" : o.plan === "enterprise" ? "#8b5cf6" : "#64748b")}>
+                      {o.plan}
+                    </span>
+                  </td>
+                  <td style={{ ...styles.td, textAlign: "center", fontWeight: 700, color: "#3b82f6" }}>{o.member_count}</td>
+                  <td style={{ ...styles.td, textAlign: "center", fontWeight: 700, color: "#06b6d4" }}>{o.project_count}</td>
+                  <td style={{ ...styles.td, textAlign: "center", fontWeight: 700, color: "#10b981" }}>{o.scan_count}</td>
+                  <td style={{ ...styles.td, fontSize: 12, color: "#94a3b8", direction: "ltr", textAlign: "right" }}>
+                    {o.created_at ? o.created_at.slice(0, 10) : "—"}
+                  </td>
+                  <td style={styles.td}>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <button onClick={() => openEdit(o)} style={btnMini("#3b82f6")} title="تعديل">✏️</button>
+                      <button onClick={() => showMembers(o)} style={btnMini("#8b5cf6")} title="الأعضاء">👥</button>
+                      <button onClick={() => deleteOrg(o)} style={btnMini("#dc2626")} title="حذف">🗑️</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* نافذة التعديل */}
       {editOrg && (
-        <div onClick={() => setEditOrg(null)} style={modal}>
-          <div onClick={(e) => e.stopPropagation()} style={modalContent}>
-            <h3 style={{ marginTop: 0, color: "#f8fafc" }}>✏️ تعديل: {editOrg.name}</h3>
-            <div style={{ marginTop: "14px" }}>
-              <label style={label}>اسم المنظّمة</label>
-              <input value={editName} onChange={(e) => setEditName(e.target.value)} style={input} />
+        <div onClick={() => setEditOrg(null)} style={styles.modalOverlay}>
+          <div onClick={(e) => e.stopPropagation()} style={styles.modalContent}>
+            <h3 style={styles.modalTitle}>✏️ تعديل: {editOrg.name}</h3>
+            <div style={{ marginTop: 14 }}>
+              <label style={styles.label}>اسم المنظّمة</label>
+              <input value={editName} onChange={(e) => setEditName(e.target.value)} style={styles.input} />
             </div>
-            <div style={{ marginTop: "14px" }}>
-              <label style={label}>الخطّة (ستُطبّق على كلّ الأعضاء)</label>
-              <select value={editPlan} onChange={(e) => setEditPlan(e.target.value)} style={input}>
+            <div style={{ marginTop: 14 }}>
+              <label style={styles.label}>الخطّة (ستُطبّق علا كلّ الأعضاء)</label>
+              <select value={editPlan} onChange={(e) => setEditPlan(e.target.value)} style={styles.input}>
                 <option value="free">Free</option>
                 <option value="pro">Pro</option>
                 <option value="enterprise">Enterprise</option>
               </select>
             </div>
-            <div style={{ display: "flex", gap: "8px", marginTop: "20px", justifyContent: "flex-end" }}>
-              <button onClick={() => setEditOrg(null)} style={btnSecondary}>إلغاء</button>
-              <button onClick={saveEdit} style={btnPrimary}>💾 حفظ</button>
+            <div style={{ display: "flex", gap: 8, marginTop: 24, justifyContent: "flex-end" }}>
+              <button onClick={() => setEditOrg(null)} style={styles.btnSecondary}>إلغاء</button>
+              <button onClick={saveEdit} style={styles.btnPrimary}>💾 حفظ</button>
             </div>
           </div>
         </div>
       )}
 
+      {/* نافذة الأعضاء */}
       {membersOrg && (
-        <div onClick={() => setMembersOrg(null)} style={modal}>
-          <div onClick={(e) => e.stopPropagation()} style={{ ...modalContent, maxWidth: "600px" }}>
-            <h3 style={{ marginTop: 0, color: "#f8fafc" }}>👥 أعضاء: {membersOrg.name}</h3>
+        <div onClick={() => setMembersOrg(null)} style={styles.modalOverlay}>
+          <div onClick={(e) => e.stopPropagation()} style={{ ...styles.modalContent, maxWidth: 600 }}>
+            <h3 style={styles.modalTitle}>👥 أعضاء: {membersOrg.name}</h3>
             {members.length === 0 ? (
-              <p style={{ color: "#64748b" }}>لا يوجد أعضاء.</p>
+              <p style={{ color: "#64748b", marginTop: 14 }}>لا يوجد أعضاء.</p>
             ) : (
-              <div style={{ maxHeight: "400px", overflowY: "auto" }}>
+              <div style={{ maxHeight: 400, overflowY: "auto", marginTop: 14 }}>
                 {members.map((m, i) => (
-                  <div key={i} style={{ padding: "12px", borderBottom: "1px solid #334155" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div>
-                        <div style={{ fontWeight: 600, color: "#f8fafc" }}>{m.username}</div>
-                        <div style={{ fontSize: "12px", color: "#94a3b8", direction: "ltr", textAlign: "right" }}>{m.email}</div>
-                      </div>
-                      <div style={{ display: "flex", gap: "6px" }}>
-                        <span style={badge(m.org_role === "owner" ? "#8b5cf6" : "#3b82f6")}>{m.org_role || "member"}</span>
-                        {m.is_verified
-                          ? <span style={badge("#16a34a")}>✓</span>
-                          : <span style={badge("#dc2626")}>✗</span>}
-                      </div>
+                  <div key={i} style={styles.memberRow}>
+                    <div>
+                      <div style={{ fontWeight: 600, color: "#0f172a" }}>{m.username}</div>
+                      <div style={{ fontSize: 12, color: "#64748b", direction: "ltr", textAlign: "right" }}>{m.email}</div>
+                    </div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <span style={badge(m.org_role === "owner" ? "#8b5cf6" : "#3b82f6")}>{m.org_role || "member"}</span>
+                      {m.is_verified
+                        ? <span style={badge("#16a34a")}>✓</span>
+                        : <span style={badge("#dc2626")}>✗</span>}
                     </div>
                   </div>
                 ))}
               </div>
             )}
-            <div style={{ marginTop: "16px", textAlign: "left" }}>
-              <button onClick={() => setMembersOrg(null)} style={btnSecondary}>إغلاق</button>
+            <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end" }}>
+              <button onClick={() => setMembersOrg(null)} style={styles.btnSecondary}>إغلاق</button>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </AdminLayout>
   );
 }
 
-const topBar: React.CSSProperties = { background: "#1e293b", borderBottom: "1px solid #334155", padding: "14px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" };
-const input: React.CSSProperties = { padding: "10px 12px", background: "#0f172a", border: "1px solid #334155", borderRadius: "8px", color: "#e2e8f0", outline: "none", fontSize: "13px", fontFamily: "inherit", width: "100%" };
-const btnPrimary: React.CSSProperties = { padding: "10px 16px", background: "#3b82f6", border: "none", color: "#fff", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: 600 };
-const btnSecondary: React.CSSProperties = { padding: "10px 16px", background: "transparent", border: "1px solid #334155", color: "#94a3b8", borderRadius: "8px", cursor: "pointer", fontSize: "13px" };
-const btnMini = (color: string): React.CSSProperties => ({ padding: "5px 10px", background: `${color}22`, border: `1px solid ${color}`, color: color, borderRadius: "6px", cursor: "pointer", fontSize: "13px" });
-const th: React.CSSProperties = { padding: "12px 10px", textAlign: "right", fontSize: "12px", fontWeight: 600, color: "#94a3b8", borderBottom: "1px solid #334155" };
-const td: React.CSSProperties = { padding: "10px", fontSize: "13px", color: "#e2e8f0" };
-const badge = (color: string): React.CSSProperties => ({ display: "inline-block", padding: "3px 10px", background: `${color}22`, color: color, border: `1px solid ${color}55`, borderRadius: "12px", fontSize: "11px", fontWeight: 600 });
-const modal: React.CSSProperties = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" };
-const modalContent: React.CSSProperties = { background: "#1e293b", border: "1px solid #334155", borderRadius: "12px", padding: "24px", width: "100%", maxWidth: "480px", direction: "rtl" };
-const label: React.CSSProperties = { display: "block", color: "#94a3b8", fontSize: "12px", marginBottom: "6px" };
+const styles: Record<string, React.CSSProperties> = {
+  filtersCard: {
+    background: "#fff",
+    padding: 16,
+    borderRadius: 12,
+    border: "1px solid #e2e8f0",
+    marginBottom: 16,
+    boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+  },
+  filtersGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: 10,
+  },
+  input: {
+    padding: "10px 14px",
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    borderRadius: 10,
+    color: "#0f172a",
+    outline: "none",
+    fontSize: 14,
+    fontFamily: "inherit",
+    width: "100%",
+  },
+  btnPrimary: {
+    padding: "10px 18px",
+    background: "linear-gradient(135deg, #3b82f6, #8b5cf6)",
+    border: "none",
+    color: "#fff",
+    borderRadius: 10,
+    cursor: "pointer",
+    fontSize: 14,
+    fontWeight: 600,
+    boxShadow: "0 2px 8px rgba(59,130,246,0.25)",
+  },
+  btnSecondary: {
+    padding: "10px 18px",
+    background: "#fff",
+    border: "1px solid #e2e8f0",
+    color: "#64748b",
+    borderRadius: 10,
+    cursor: "pointer",
+    fontSize: 14,
+    fontWeight: 500,
+  },
+  tableCard: {
+    background: "#fff",
+    border: "1px solid #e2e8f0",
+    borderRadius: 12,
+    overflow: "hidden",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+  },
+  table: {
+    width: "100%",
+    borderCollapse: "collapse",
+    minWidth: 900,
+  },
+  tableHeadRow: {
+    background: "#f8fafc",
+  },
+  th: {
+    padding: "14px 12px",
+    textAlign: "right",
+    fontSize: 12,
+    fontWeight: 700,
+    color: "#64748b",
+    borderBottom: "1px solid #e2e8f0",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  tableRow: {
+    borderTop: "1px solid #f1f5f9",
+  },
+  td: {
+    padding: "12px",
+    fontSize: 14,
+    color: "#334155",
+  },
+  emptyCell: {
+    padding: 40,
+    textAlign: "center",
+    color: "#94a3b8",
+    fontSize: 14,
+  },
+  modalOverlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(15,23,42,0.6)",
+    backdropFilter: "blur(4px)",
+    zIndex: 200,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  modalContent: {
+    background: "#fff",
+    border: "1px solid #e2e8f0",
+    borderRadius: 16,
+    padding: 28,
+    width: "100%",
+    maxWidth: 480,
+    direction: "rtl",
+    boxShadow: "0 20px 50px rgba(0,0,0,0.2)",
+  },
+  modalTitle: {
+    margin: 0,
+    color: "#0f172a",
+    fontSize: 20,
+    fontWeight: 700,
+  },
+  label: {
+    display: "block",
+    color: "#475569",
+    fontSize: 13,
+    fontWeight: 600,
+    marginBottom: 8,
+  },
+  memberRow: {
+    padding: "14px 12px",
+    borderBottom: "1px solid #f1f5f9",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    background: "#f8fafc",
+    marginBottom: 6,
+    borderRadius: 10,
+  },
+};
+
+const btnMini = (color: string): React.CSSProperties => ({
+  padding: "6px 12px",
+  background: `${color}15`,
+  border: `1px solid ${color}40`,
+  color: color,
+  borderRadius: 8,
+  cursor: "pointer",
+  fontSize: 14,
+  fontWeight: 500,
+});
+
+const badge = (color: string): React.CSSProperties => ({
+  display: "inline-block",
+  padding: "4px 12px",
+  background: `${color}15`,
+  color: color,
+  border: `1px solid ${color}30`,
+  borderRadius: 20,
+  fontSize: 12,
+  fontWeight: 600,
+});
 
 export default AdminOrganizations;
