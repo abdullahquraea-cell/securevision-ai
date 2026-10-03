@@ -143,6 +143,20 @@ function AdminDashboard() {
                 >
                   🏢 إدارة المنظّمات ({stats.organizations.total})
                 </button>
+
+                                
+                <button
+                  onClick={() => window.location.href = "/subscriptions"}
+                  style={{
+                    padding: "14px 24px",
+                    background: "linear-gradient(135deg, #10b981, #059669)",
+                    color: "#fff", border: "none", borderRadius: "10px",
+                    cursor: "pointer", fontSize: "14px", fontWeight: 600,
+                  }}
+                >
+                  💳 الاشتراكات والإيرادات
+                </button>
+             
               </div>
             </Section>
 

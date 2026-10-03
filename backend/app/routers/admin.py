@@ -504,3 +504,115 @@ def delete_organization(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"فشل الحذف: {str(e)[:200]}")
+
+        # ==========================
+# Subscriptions & Revenue
+# ==========================
+
+# أسعار الخطط (ممكن تعديلها لاحقاً)
+PLAN_PRICES = {
+    "free": 0,
+    "pro": 29,
+    "enterprise": 99,
+}
+
+
+@router.get("/subscriptions")
+def list_subscriptions(
+    plan: Optional[str] = None,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """قائمة المستخدمين المشتركين مع تفاصيل خطّتهم."""
+    try:
+        q = """SELECT u.id, u.username, u.email, u.plan,
+                      u.is_verified, u.created_at,
+                      o.name AS org_name
+               FROM users u
+               LEFT JOIN organizations o ON u.organization_id = o.id"""
+        params: dict = {}
+        if plan:
+            q += " WHERE u.plan = :p"
+            params["p"] = plan
+        q += " ORDER BY u.plan DESC, u.id DESC"
+
+        rows = db.execute(text(q), params).fetchall()
+        users = [
+            {
+                "id": r[0],
+                "username": r[1],
+                "email": r[2],
+                "plan": r[3] or "free",
+                "is_verified": bool(r[4]),
+                "created_at": str(r[5]) if r[5] else None,
+                "org_name": r[6] or "—",
+                "monthly_price": PLAN_PRICES.get(r[3] or "free", 0),
+            }
+            for r in rows
+        ]
+        return {"total": len(users), "users": users}
+    except Exception as e:
+        try: db.rollback()
+        except: pass
+        raise HTTPException(status_code=500, detail=f"فشل: {str(e)[:200]}")
+
+
+@router.get("/subscriptions/revenue")
+def revenue_stats(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """إحصائيات الإيرادات التقديرية."""
+    free_count = _safe_count(db, "SELECT COUNT(*) FROM users WHERE plan IS NULL OR plan = 'free'")
+    pro_count = _safe_count(db, "SELECT COUNT(*) FROM users WHERE plan = 'pro'")
+    enterprise_count = _safe_count(db, "SELECT COUNT(*) FROM users WHERE plan = 'enterprise'")
+
+    mrr = (pro_count * PLAN_PRICES["pro"]) + (enterprise_count * PLAN_PRICES["enterprise"])
+    arr = mrr * 12
+    total_paid = pro_count + enterprise_count
+    total_users = free_count + pro_count + enterprise_count
+
+    return {
+        "plans": {
+            "free": {"count": free_count, "price": PLAN_PRICES["free"], "revenue": 0},
+            "pro": {"count": pro_count, "price": PLAN_PRICES["pro"], "revenue": pro_count * PLAN_PRICES["pro"]},
+            "enterprise": {"count": enterprise_count, "price": PLAN_PRICES["enterprise"], "revenue": enterprise_count * PLAN_PRICES["enterprise"]},
+        },
+        "mrr": mrr,
+        "arr": arr,
+        "total_paid_users": total_paid,
+        "total_users": total_users,
+        "conversion_rate": round((total_paid / total_users * 100) if total_users else 0, 1),
+    }
+
+
+class PlanUpdate(BaseModel):
+    plan: str
+
+
+@router.patch("/subscriptions/{user_id}")
+def update_user_plan(
+    user_id: int,
+    data: PlanUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """تغيير خطّة اشتراك مستخدم (مثلاً ترقية مجّانية لصديق)."""
+    if data.plan not in PLAN_PRICES:
+        raise HTTPException(status_code=400, detail=f"خطّة غير صحيحة: {data.plan}")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+
+    try:
+        user.plan = data.plan
+    except Exception:
+        pass
+    try:
+        user.subscription_plan = data.plan
+    except Exception:
+        pass
+
+    db.commit()
+    return {"message": f"تمّ تحديث خطّة {user.username} إلى {data.plan}", "user_id": user_id}
