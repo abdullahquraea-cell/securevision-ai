@@ -1037,3 +1037,106 @@ def delete_scan(
         except Exception:
             pass
         raise HTTPException(status_code=500, detail=f"فشل الحذف: {str(e)[:200]}")
+
+        # ==========================
+# System Settings
+# ==========================
+
+@router.get("/settings")
+def get_settings(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """جلب كلّ إعدادات النظام مجمّعة حسب الفئة."""
+    try:
+        rows = db.execute(
+            text("""
+                SELECT key, value, category, description, updated_at
+                FROM system_settings
+                ORDER BY category, key
+            """)
+        ).fetchall()
+
+        grouped: dict = {}
+        for r in rows:
+            cat = r[2] or "other"
+            if cat not in grouped:
+                grouped[cat] = []
+            grouped[cat].append({
+                "key": r[0],
+                "value": r[1] or "",
+                "category": cat,
+                "description": r[3] or "",
+                "updated_at": str(r[4]) if r[4] else None,
+            })
+
+        return {"settings": grouped}
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"فشل الجلب: {str(e)[:200]}")
+
+
+@router.patch("/settings")
+def update_settings(
+    payload: dict,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """تحديث مجموعة إعدادات دفعة واحدة.
+    
+    Body: {"platform_name": "جديد", "maintenance_mode": "true", ...}
+    """
+    try:
+        if not isinstance(payload, dict) or not payload:
+            raise HTTPException(status_code=400, detail="لا توجد بيانات للتحديث")
+
+        updated_keys = []
+        for key, value in payload.items():
+            # تحقّق أنّ المفتاح موجود (أمان)
+            exists = db.execute(
+                text("SELECT 1 FROM system_settings WHERE key = :k"),
+                {"k": key}
+            ).fetchone()
+
+            if not exists:
+                continue
+
+            db.execute(
+                text("""
+                    UPDATE system_settings
+                    SET value = :v, updated_at = NOW(), updated_by = :uid
+                    WHERE key = :k
+                """),
+                {"v": str(value), "k": key, "uid": admin.id}
+            )
+            updated_keys.append(key)
+
+        db.commit()
+
+        return {"ok": True, "updated": updated_keys, "count": len(updated_keys)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"فشل التحديث: {str(e)[:200]}")
+
+
+@router.get("/settings/public")
+def get_public_settings(db: Session = Depends(get_db)):
+    """إعدادات عامّة متاحة بدون أدمن (مثل maintenance_mode، platform_name)."""
+    try:
+        rows = db.execute(
+            text("""
+                SELECT key, value FROM system_settings
+                WHERE key IN ('platform_name', 'platform_logo', 'maintenance_mode', 'maintenance_message')
+            """)
+        ).fetchall()
+        return {r[0]: r[1] or "" for r in rows}
+    except Exception:
+        return {}

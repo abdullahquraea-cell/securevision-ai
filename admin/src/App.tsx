@@ -6,6 +6,7 @@ import AdminOrganizations from "./pages/AdminOrganizations";
 import AdminSubscriptions from "./pages/AdminSubscriptions";
 import AdminActivity from "./pages/AdminActivity";
 import AdminScans from "./pages/AdminScans";
+import AdminSettings from "./pages/AdminSettings";
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
         <Route path="/subscriptions" element={<AdminSubscriptions />} />
         <Route path="/activity" element={<AdminActivity />} />
         <Route path="/scans" element={<AdminScans />} />
+        <Route path="/settings" element={<AdminSettings />} />
       </Routes>
     </BrowserRouter>
   );
