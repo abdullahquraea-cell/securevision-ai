@@ -747,3 +747,293 @@ def update_user_plan(
 
     db.commit()
     return {"message": f"تمّ تحديث خطّة {user.username} إلى {data.plan}", "user_id": user_id}
+
+
+    # ==========================
+# Scans Monitoring
+# ==========================
+
+@router.get("/scans")
+def list_scans(
+    limit: int = 50,
+    offset: int = 0,
+    status: str | None = None,
+    scan_type: str | None = None,
+    user_id: int | None = None,
+    project_id: int | None = None,
+    search: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """جلب كلّ الفحوصات مع فلاتر."""
+    try:
+        where_clauses = []
+        params: dict = {"limit": limit, "offset": offset}
+
+        if status:
+            where_clauses.append("s.status = :status")
+            params["status"] = status
+        if scan_type:
+            where_clauses.append("s.scan_type = :scan_type")
+            params["scan_type"] = scan_type
+        if user_id:
+            where_clauses.append("s.owner_id = :user_id")
+            params["user_id"] = user_id
+        if project_id:
+            where_clauses.append("s.project_id = :project_id")
+            params["project_id"] = project_id
+        if search:
+            where_clauses.append("(u.username ILIKE :search OR p.name ILIKE :search OR s.scan_type ILIKE :search)")
+            params["search"] = f"%{search}%"
+        if date_from:
+            where_clauses.append("s.created_at >= :date_from")
+            params["date_from"] = date_from
+        if date_to:
+            where_clauses.append("s.created_at <= :date_to")
+            params["date_to"] = date_to
+
+        where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+        total_row = db.execute(
+            text(f"""
+                SELECT COUNT(*) FROM scans s
+                LEFT JOIN users u ON u.id = s.owner_id
+                LEFT JOIN projects p ON p.id = s.project_id
+                {where_sql}
+            """),
+            params,
+        ).fetchone()
+        total = total_row[0] if total_row else 0
+
+        rows = db.execute(
+            text(f"""
+                SELECT s.id, s.scan_type, s.status, s.findings_count, s.created_at,
+                       s.owner_id, u.username, u.email,
+                       s.project_id, p.name as project_name
+                FROM scans s
+                LEFT JOIN users u ON u.id = s.owner_id
+                LEFT JOIN projects p ON p.id = s.project_id
+                {where_sql}
+                ORDER BY s.created_at DESC
+                LIMIT :limit OFFSET :offset
+            """),
+            params,
+        ).fetchall()
+
+        scans = [
+            {
+                "id": r[0],
+                "scan_type": r[1] or "unknown",
+                "status": r[2] or "unknown",
+                "findings_count": r[3] or 0,
+                "created_at": str(r[4]) if r[4] else None,
+                "owner_id": r[5],
+                "username": r[6] or "محذوف",
+                "email": r[7] or "—",
+                "project_id": r[8],
+                "project_name": r[9] or "—",
+            }
+            for r in rows
+        ]
+
+        status_rows = db.execute(text("SELECT DISTINCT status FROM scans WHERE status IS NOT NULL ORDER BY status")).fetchall()
+        type_rows = db.execute(text("SELECT DISTINCT scan_type FROM scans WHERE scan_type IS NOT NULL ORDER BY scan_type")).fetchall()
+
+        return {
+            "total": total,
+            "scans": scans,
+            "statuses": [r[0] for r in status_rows],
+            "scan_types": [r[0] for r in type_rows],
+        }
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"فشل جلب الفحوصات: {str(e)[:200]}")
+
+
+@router.get("/scans/stats")
+def scans_stats(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """إحصائيّات الفحوصات."""
+    try:
+        total = db.execute(text("SELECT COUNT(*) FROM scans")).scalar() or 0
+        today = db.execute(
+            text("SELECT COUNT(*) FROM scans WHERE created_at >= CURRENT_DATE")
+        ).scalar() or 0
+        last_7d = db.execute(
+            text("SELECT COUNT(*) FROM scans WHERE created_at >= NOW() - INTERVAL '7 days'")
+        ).scalar() or 0
+        running = db.execute(
+            text("SELECT COUNT(*) FROM scans WHERE status IN ('running', 'pending', 'in_progress')")
+        ).scalar() or 0
+        failed = db.execute(
+            text("SELECT COUNT(*) FROM scans WHERE status = 'failed'")
+        ).scalar() or 0
+        total_findings = db.execute(text("SELECT COUNT(*) FROM findings")).scalar() or 0
+
+        by_status = db.execute(
+            text("SELECT status, COUNT(*) FROM scans GROUP BY status ORDER BY COUNT(*) DESC")
+        ).fetchall()
+        by_type = db.execute(
+            text("SELECT scan_type, COUNT(*) FROM scans WHERE scan_type IS NOT NULL GROUP BY scan_type ORDER BY COUNT(*) DESC")
+        ).fetchall()
+        by_severity = db.execute(
+            text("SELECT severity, COUNT(*) FROM findings WHERE severity IS NOT NULL GROUP BY severity ORDER BY COUNT(*) DESC")
+        ).fetchall()
+
+        return {
+            "total": total,
+            "today": today,
+            "last_7d": last_7d,
+            "running": running,
+            "failed": failed,
+            "total_findings": total_findings,
+            "by_status": [{"status": r[0] or "unknown", "count": r[1]} for r in by_status],
+            "by_type": [{"type": r[0], "count": r[1]} for r in by_type],
+            "by_severity": [{"severity": r[0], "count": r[1]} for r in by_severity],
+        }
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return {"total": 0, "today": 0, "last_7d": 0, "running": 0, "failed": 0,
+                "total_findings": 0, "by_status": [], "by_type": [], "by_severity": []}
+
+
+@router.get("/scans/{scan_id}")
+def scan_details(
+    scan_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """تفاصيل فحص واحد مع كلّ الثغرات."""
+    try:
+        scan_row = db.execute(
+            text("""
+                SELECT s.id, s.scan_type, s.status, s.findings_count, s.created_at,
+                       s.owner_id, u.username, u.email,
+                       s.project_id, p.name as project_name
+                FROM scans s
+                LEFT JOIN users u ON u.id = s.owner_id
+                LEFT JOIN projects p ON p.id = s.project_id
+                WHERE s.id = :sid
+            """),
+            {"sid": scan_id},
+        ).fetchone()
+
+        if not scan_row:
+            raise HTTPException(status_code=404, detail="الفحص غير موجود")
+
+        findings_rows = db.execute(
+            text("""
+                SELECT id, title, severity, description, location, recommendation, created_at
+                FROM findings
+                WHERE scan_id = :sid
+                ORDER BY
+                    CASE severity
+                        WHEN 'critical' THEN 1
+                        WHEN 'high' THEN 2
+                        WHEN 'medium' THEN 3
+                        WHEN 'low' THEN 4
+                        ELSE 5
+                    END,
+                    created_at DESC
+            """),
+            {"sid": scan_id},
+        ).fetchall()
+
+        return {
+            "scan": {
+                "id": scan_row[0],
+                "scan_type": scan_row[1] or "unknown",
+                "status": scan_row[2] or "unknown",
+                "findings_count": scan_row[3] or 0,
+                "created_at": str(scan_row[4]) if scan_row[4] else None,
+                "owner_id": scan_row[5],
+                "username": scan_row[6] or "محذوف",
+                "email": scan_row[7] or "—",
+                "project_id": scan_row[8],
+                "project_name": scan_row[9] or "—",
+            },
+            "findings": [
+                {
+                    "id": r[0],
+                    "title": r[1],
+                    "severity": r[2] or "info",
+                    "description": r[3] or "",
+                    "location": r[4] or "",
+                    "recommendation": r[5] or "",
+                    "created_at": str(r[6]) if r[6] else None,
+                }
+                for r in findings_rows
+            ],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"فشل الجلب: {str(e)[:200]}")
+
+
+@router.post("/scans/{scan_id}/cancel")
+def cancel_scan(
+    scan_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """إلغاء فحص عالق يدويًّا."""
+    try:
+        row = db.execute(text("SELECT status FROM scans WHERE id = :sid"), {"sid": scan_id}).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="الفحص غير موجود")
+        if row[0] not in ("running", "pending", "in_progress"):
+            raise HTTPException(status_code=400, detail=f"لا يمكن إلغاء فحص بحالة: {row[0]}")
+
+        db.execute(text("UPDATE scans SET status = 'cancelled' WHERE id = :sid"), {"sid": scan_id})
+        db.commit()
+        return {"ok": True, "message": "تمّ إلغاء الفحص"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"فشل الإلغاء: {str(e)[:200]}")
+
+
+@router.delete("/scans/{scan_id}")
+def delete_scan(
+    scan_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """حذف فحص وكلّ ثغراته."""
+    try:
+        row = db.execute(text("SELECT id FROM scans WHERE id = :sid"), {"sid": scan_id}).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="الفحص غير موجود")
+
+        db.execute(text("DELETE FROM findings WHERE scan_id = :sid"), {"sid": scan_id})
+        db.commit()
+        db.execute(text("DELETE FROM scans WHERE id = :sid"), {"sid": scan_id})
+        db.commit()
+        return {"ok": True, "message": "تمّ الحذف"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"فشل الحذف: {str(e)[:200]}")
