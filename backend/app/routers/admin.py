@@ -1825,3 +1825,277 @@ def delete_api_key(
         except Exception:
             pass
         raise HTTPException(status_code=500, detail=f"فشل الحذف: {str(e)[:200]}")
+
+        # ==========================
+# Analytics & BI
+# ==========================
+
+@router.get("/analytics/users-growth")
+def analytics_users_growth(
+    days: int = 30,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """نموّ المستخدمين اليوميّ."""
+    try:
+        rows = db.execute(
+            text(f"""
+                SELECT DATE(created_at) as day, COUNT(*) as new_users
+                FROM users
+                WHERE created_at >= NOW() - INTERVAL '{int(days)} days'
+                GROUP BY DATE(created_at)
+                ORDER BY day
+            """)
+        ).fetchall()
+
+        # Build cumulative count
+        total_before = db.execute(
+            text(f"SELECT COUNT(*) FROM users WHERE created_at < NOW() - INTERVAL '{int(days)} days'")
+        ).scalar() or 0
+
+        cumulative = total_before
+        data = []
+        for r in rows:
+            cumulative += r[1]
+            data.append({
+                "day": str(r[0]),
+                "new": r[1],
+                "total": cumulative,
+            })
+
+        return {"data": data}
+    except Exception as e:
+        return {"data": [], "error": str(e)[:200]}
+
+
+@router.get("/analytics/scans-timeline")
+def analytics_scans_timeline(
+    days: int = 30,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """الفحوصات اليوميّة."""
+    try:
+        rows = db.execute(
+            text(f"""
+                SELECT DATE(created_at) as day, COUNT(*) as scans,
+                       COALESCE(SUM(findings_count), 0) as findings
+                FROM scans
+                WHERE created_at >= NOW() - INTERVAL '{int(days)} days'
+                GROUP BY DATE(created_at)
+                ORDER BY day
+            """)
+        ).fetchall()
+
+        return {
+            "data": [
+                {"day": str(r[0]), "scans": r[1], "findings": r[2]}
+                for r in rows
+            ]
+        }
+    except Exception as e:
+        return {"data": [], "error": str(e)[:200]}
+
+
+@router.get("/analytics/plans-distribution")
+def analytics_plans_distribution(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """توزيع المستخدمين حسب الخطّة."""
+    try:
+        rows = db.execute(
+            text("""
+                SELECT COALESCE(subscription_plan, 'free') as plan, COUNT(*) as count
+                FROM users
+                GROUP BY subscription_plan
+                ORDER BY count DESC
+            """)
+        ).fetchall()
+        return {"data": [{"plan": r[0], "count": r[1]} for r in rows]}
+    except Exception as e:
+        return {"data": [], "error": str(e)[:200]}
+
+
+@router.get("/analytics/severity-distribution")
+def analytics_severity_distribution(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """توزيع الثغرات حسب الشدّة."""
+    try:
+        rows = db.execute(
+            text("""
+                SELECT COALESCE(severity, 'unknown') as severity, COUNT(*) as count
+                FROM findings
+                GROUP BY severity
+                ORDER BY
+                    CASE severity
+                        WHEN 'critical' THEN 1
+                        WHEN 'high' THEN 2
+                        WHEN 'medium' THEN 3
+                        WHEN 'low' THEN 4
+                        WHEN 'info' THEN 5
+                        ELSE 6
+                    END
+            """)
+        ).fetchall()
+        return {"data": [{"severity": r[0], "count": r[1]} for r in rows]}
+    except Exception as e:
+        return {"data": [], "error": str(e)[:200]}
+
+
+@router.get("/analytics/top-scanners")
+def analytics_top_scanners(
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """أكثر المستخدمين فحصًا."""
+    try:
+        rows = db.execute(
+            text(f"""
+                SELECT u.id, u.username, u.email, u.subscription_plan,
+                       COUNT(s.id) as scan_count,
+                       COALESCE(SUM(s.findings_count), 0) as findings_count
+                FROM users u
+                LEFT JOIN scans s ON s.owner_id = u.id
+                GROUP BY u.id, u.username, u.email, u.subscription_plan
+                HAVING COUNT(s.id) > 0
+                ORDER BY scan_count DESC
+                LIMIT {int(limit)}
+            """)
+        ).fetchall()
+
+        return {
+            "data": [
+                {
+                    "id": r[0], "username": r[1], "email": r[2],
+                    "plan": r[3] or "free", "scans": r[4], "findings": r[5]
+                }
+                for r in rows
+            ]
+        }
+    except Exception as e:
+        return {"data": [], "error": str(e)[:200]}
+
+
+@router.get("/analytics/activity-by-day")
+def analytics_activity_by_day(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """النشاط حسب يوم الأسبوع (آخر 30 يوم)."""
+    try:
+        rows = db.execute(
+            text("""
+                SELECT EXTRACT(DOW FROM created_at)::int as dow, COUNT(*) as count
+                FROM activities
+                WHERE created_at >= NOW() - INTERVAL '30 days'
+                GROUP BY dow
+                ORDER BY dow
+            """)
+        ).fetchall()
+
+        day_names = {0: "الأحد", 1: "الاثنين", 2: "الثلاثاء", 3: "الأربعاء",
+                     4: "الخميس", 5: "الجمعة", 6: "السبت"}
+
+        data = {dow: 0 for dow in range(7)}
+        for r in rows:
+            data[r[0]] = r[1]
+
+        return {
+            "data": [
+                {"day": day_names[dow], "count": data[dow]}
+                for dow in range(7)
+            ]
+        }
+    except Exception as e:
+        return {"data": [], "error": str(e)[:200]}
+
+
+@router.get("/analytics/revenue-trend")
+def analytics_revenue_trend(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """اتّجاه الإيرادات (تقدير بناءً علا تواريخ ترقية الخطط)."""
+    try:
+        rows = db.execute(
+            text("""
+                SELECT DATE_TRUNC('month', created_at)::date as month,
+                       COUNT(CASE WHEN subscription_plan = 'pro' THEN 1 END) as pro,
+                       COUNT(CASE WHEN subscription_plan = 'enterprise' THEN 1 END) as enterprise
+                FROM users
+                WHERE created_at >= NOW() - INTERVAL '6 months'
+                GROUP BY DATE_TRUNC('month', created_at)
+                ORDER BY month
+            """)
+        ).fetchall()
+
+        PRO_PRICE = 29
+        ENT_PRICE = 99
+
+        return {
+            "data": [
+                {
+                    "month": str(r[0]),
+                    "pro": r[1],
+                    "enterprise": r[2],
+                    "revenue": r[1] * PRO_PRICE + r[2] * ENT_PRICE,
+                }
+                for r in rows
+            ]
+        }
+    except Exception as e:
+        return {"data": [], "error": str(e)[:200]}
+
+
+@router.get("/analytics/summary")
+def analytics_summary(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """ملخّص عامّ."""
+    try:
+        total_users = db.execute(text("SELECT COUNT(*) FROM users")).scalar() or 0
+        new_users_30d = db.execute(
+            text("SELECT COUNT(*) FROM users WHERE created_at >= NOW() - INTERVAL '30 days'")
+        ).scalar() or 0
+        new_users_prev_30d = db.execute(
+            text("SELECT COUNT(*) FROM users WHERE created_at BETWEEN NOW() - INTERVAL '60 days' AND NOW() - INTERVAL '30 days'")
+        ).scalar() or 0
+
+        total_scans = db.execute(text("SELECT COUNT(*) FROM scans")).scalar() or 0
+        scans_30d = db.execute(
+            text("SELECT COUNT(*) FROM scans WHERE created_at >= NOW() - INTERVAL '30 days'")
+        ).scalar() or 0
+
+        total_findings = db.execute(text("SELECT COUNT(*) FROM findings")).scalar() or 0
+        critical_count = db.execute(
+            text("SELECT COUNT(*) FROM findings WHERE severity = 'critical'")
+        ).scalar() or 0
+
+        paid_users = db.execute(
+            text("SELECT COUNT(*) FROM users WHERE subscription_plan IN ('pro', 'enterprise')")
+        ).scalar() or 0
+
+        growth_rate = 0.0
+        if new_users_prev_30d > 0:
+            growth_rate = round(((new_users_30d - new_users_prev_30d) / new_users_prev_30d) * 100, 1)
+        elif new_users_30d > 0:
+            growth_rate = 100.0
+
+        return {
+            "total_users": total_users,
+            "new_users_30d": new_users_30d,
+            "growth_rate": growth_rate,
+            "total_scans": total_scans,
+            "scans_30d": scans_30d,
+            "total_findings": total_findings,
+            "critical_count": critical_count,
+            "paid_users": paid_users,
+            "conversion_rate": round((paid_users / total_users * 100) if total_users > 0 else 0, 1),
+        }
+    except Exception as e:
+        return {"error": str(e)[:200]}

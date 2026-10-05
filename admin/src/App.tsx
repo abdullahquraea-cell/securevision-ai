@@ -10,6 +10,8 @@ import AdminSettings from "./pages/AdminSettings";
 import AdminAnnouncements from "./pages/AdminAnnouncements";
 import AdminServer from "./pages/AdminServer";
 import AdminApiKeys from "./pages/AdminApiKeys";
+import AdminAnalytics from "./pages/AdminAnalytics";
+<Route path="/analytics" element={<AdminAnalytics />} />
 
 function App() {
   return (

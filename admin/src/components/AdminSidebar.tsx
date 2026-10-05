@@ -8,11 +8,12 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { path: "/dashboard", label: "لوحة التحكّم", icon: "📊" },
+  { path: "/analytics", label: "التحليلات المتقدّمة", icon: "📈" },
   { path: "/users", label: "المستخدمون", icon: "👥" },
   { path: "/organizations", label: "المنظّمات", icon: "🏢" },
   { path: "/subscriptions", label: "الاشتراكات والإيرادات", icon: "💳" },
-  { path: "/activity", label: "سجلّ النشاط", icon: "📜" },
   { path: "/scans", label: "الفحوصات الأمنيّة", icon: "🔍" },
+  { path: "/activity", label: "سجلّ النشاط", icon: "📜" },
   { path: "/announcements", label: "الإعلانات والإشعارات", icon: "📢" },
   { path: "/api-keys", label: "مفاتيح API", icon: "🔑" },
   { path: "/server", label: "مراقبة السيرفر", icon: "🖥️" },
@@ -70,9 +71,9 @@ export default function AdminSidebar() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  sidebar: {
+   sidebar: {
     width: 280,
-    minHeight: "100vh",
+    height: "100vh",
     background: "linear-gradient(180deg, #0f172a 0%, #1e293b 100%)",
     color: "#f8fafc",
     display: "flex",
@@ -82,6 +83,7 @@ const styles: Record<string, React.CSSProperties> = {
     top: 0,
     boxShadow: "-4px 0 20px rgba(0,0,0,0.1)",
     zIndex: 100,
+    overflow: "hidden",
   },
   logoBox: {
     display: "flex",
@@ -114,12 +116,15 @@ const styles: Record<string, React.CSSProperties> = {
     background: "rgba(255,255,255,0.08)",
     margin: "0 20px",
   },
-  nav: {
+   nav: {
     flex: 1,
     padding: "20px 12px",
     display: "flex",
     flexDirection: "column",
     gap: 4,
+    overflowY: "auto",
+    overflowX: "hidden",
+    minHeight: 0,
   },
   navLink: {
     display: "flex",
