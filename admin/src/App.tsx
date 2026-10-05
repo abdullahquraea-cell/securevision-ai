@@ -8,6 +8,7 @@ import AdminActivity from "./pages/AdminActivity";
 import AdminScans from "./pages/AdminScans";
 import AdminSettings from "./pages/AdminSettings";
 import AdminAnnouncements from "./pages/AdminAnnouncements";
+import AdminServer from "./pages/AdminServer";
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
         <Route path="/scans" element={<AdminScans />} />
         <Route path="/settings" element={<AdminSettings />} />
         <Route path="/announcements" element={<AdminAnnouncements />} />
+        <Route path="/server" element={<AdminServer />} />
       </Routes>
     </BrowserRouter>
   );

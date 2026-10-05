@@ -4,6 +4,11 @@
 """
 from datetime import datetime, timedelta
 
+
+import psutil
+import time
+
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from typing import Optional
@@ -1368,3 +1373,174 @@ def delete_announcement(
         except Exception:
             pass
         raise HTTPException(status_code=500, detail=f"فشل الحذف: {str(e)[:200]}")
+
+        # ==========================
+# Server Monitoring
+# ==========================
+
+@router.get("/server/stats")
+def server_stats(admin: User = Depends(require_admin)):
+    """إحصائيّات حيّة للسيرفر (CPU, RAM, Disk)."""
+    try:
+        cpu_percent = psutil.cpu_percent(interval=0.5)
+        cpu_count = psutil.cpu_count() or 1
+        cpu_freq = None
+        try:
+            freq = psutil.cpu_freq()
+            if freq:
+                cpu_freq = round(freq.current, 2)
+        except Exception:
+            pass
+
+        mem = psutil.virtual_memory()
+        swap = psutil.swap_memory()
+        disk = psutil.disk_usage('/')
+
+        # Uptime
+        try:
+            boot_time = psutil.boot_time()
+            uptime_sec = int(time.time() - boot_time)
+        except Exception:
+            uptime_sec = 0
+
+        # Network IO (totals)
+        try:
+            net = psutil.net_io_counters()
+            net_sent_mb = round(net.bytes_sent / 1024 / 1024, 2)
+            net_recv_mb = round(net.bytes_recv / 1024 / 1024, 2)
+        except Exception:
+            net_sent_mb = 0
+            net_recv_mb = 0
+
+        # Load average (Linux)
+        load_avg = []
+        try:
+            la = psutil.getloadavg()
+            load_avg = [round(x, 2) for x in la]
+        except Exception:
+            pass
+
+        return {
+            "cpu": {
+                "percent": cpu_percent,
+                "count": cpu_count,
+                "freq_mhz": cpu_freq,
+                "load_avg": load_avg,
+            },
+            "memory": {
+                "total_gb": round(mem.total / 1024 / 1024 / 1024, 2),
+                "used_gb": round(mem.used / 1024 / 1024 / 1024, 2),
+                "free_gb": round(mem.available / 1024 / 1024 / 1024, 2),
+                "percent": mem.percent,
+            },
+            "swap": {
+                "total_gb": round(swap.total / 1024 / 1024 / 1024, 2),
+                "used_gb": round(swap.used / 1024 / 1024 / 1024, 2),
+                "percent": swap.percent,
+            },
+            "disk": {
+                "total_gb": round(disk.total / 1024 / 1024 / 1024, 2),
+                "used_gb": round(disk.used / 1024 / 1024 / 1024, 2),
+                "free_gb": round(disk.free / 1024 / 1024 / 1024, 2),
+                "percent": disk.percent,
+            },
+            "network": {
+                "sent_mb": net_sent_mb,
+                "recv_mb": net_recv_mb,
+            },
+            "uptime_sec": uptime_sec,
+            "timestamp": int(time.time()),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"فشل الجلب: {str(e)[:200]}")
+
+
+@router.get("/server/db-stats")
+def db_stats(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """إحصائيّات قاعدة البيانات (الحجم، الجداول، عدد الصفوف)."""
+    try:
+        # Total DB size
+        db_size = db.execute(
+            text("SELECT pg_database_size(current_database())")
+        ).scalar() or 0
+
+        # Table sizes
+        table_rows = db.execute(text("""
+            SELECT
+                tablename,
+                pg_total_relation_size(schemaname || '.' || tablename) as size_bytes,
+                pg_relation_size(schemaname || '.' || tablename) as data_bytes
+            FROM pg_tables
+            WHERE schemaname = 'public'
+            ORDER BY size_bytes DESC
+        """)).fetchall()
+
+        tables = []
+        for r in table_rows:
+            tbl_name = r[0]
+            size_b = r[1] or 0
+            # count rows
+            try:
+                cnt = db.execute(text(f"SELECT COUNT(*) FROM {tbl_name}")).scalar() or 0
+            except Exception:
+                cnt = 0
+            tables.append({
+                "name": tbl_name,
+                "size_mb": round(size_b / 1024 / 1024, 2),
+                "size_bytes": size_b,
+                "row_count": cnt,
+            })
+
+        # Postgres version
+        pg_ver_row = db.execute(text("SHOW server_version")).fetchone()
+        pg_version = pg_ver_row[0] if pg_ver_row else "unknown"
+
+        # Active connections
+        conn_count = db.execute(
+            text("SELECT COUNT(*) FROM pg_stat_activity WHERE datname = current_database()")
+        ).scalar() or 0
+
+        return {
+            "db_size_mb": round(db_size / 1024 / 1024, 2),
+            "db_size_bytes": db_size,
+            "tables": tables,
+            "table_count": len(tables),
+            "pg_version": pg_version,
+            "active_connections": conn_count,
+        }
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"فشل الجلب: {str(e)[:200]}")
+
+
+@router.get("/server/processes")
+def top_processes(
+    limit: int = 10,
+    admin: User = Depends(require_admin),
+):
+    """أعلى العمليّات استهلاكًا للـ CPU."""
+    try:
+        processes = []
+        for p in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
+            try:
+                info = p.info
+                if info['cpu_percent'] is not None:
+                    processes.append({
+                        "pid": info['pid'],
+                        "name": info['name'] or "unknown",
+                        "cpu_percent": round(info['cpu_percent'], 2),
+                        "memory_percent": round(info.get('memory_percent') or 0, 2),
+                    })
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+
+        processes.sort(key=lambda x: x['cpu_percent'], reverse=True)
+        return {"processes": processes[:limit]}
+    except Exception as e:
+        return {"processes": [], "error": str(e)[:200]}

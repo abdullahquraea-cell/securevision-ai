@@ -61,3 +61,5 @@ firebase-admin==6.5.0
 arabic-reshaper==3.0.1
 
 psycopg[binary]==3.3.4
+
+psutil==5.9.8
