@@ -1140,3 +1140,231 @@ def get_public_settings(db: Session = Depends(get_db)):
         return {r[0]: r[1] or "" for r in rows}
     except Exception:
         return {}
+
+
+        # ==========================
+# Announcements
+# ==========================
+
+@router.get("/announcements")
+def list_announcements(
+    limit: int = 50,
+    offset: int = 0,
+    is_active: bool | None = None,
+    search: str | None = None,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """جلب كلّ الإعلانات."""
+    try:
+        where = []
+        params: dict = {"limit": limit, "offset": offset}
+
+        if is_active is not None:
+            where.append("a.is_active = :is_active")
+            params["is_active"] = is_active
+        if search:
+            where.append("(a.title ILIKE :search OR a.message ILIKE :search)")
+            params["search"] = f"%{search}%"
+
+        where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+
+        total = db.execute(
+            text(f"SELECT COUNT(*) FROM announcements a {where_sql}"),
+            params
+        ).scalar() or 0
+
+        rows = db.execute(
+            text(f"""
+                SELECT a.id, a.title, a.message, a.type, a.target,
+                       a.is_active, a.scheduled_at, a.expires_at,
+                       a.created_by, u.username, a.created_at,
+                       (SELECT COUNT(*) FROM announcement_reads WHERE announcement_id = a.id) as reads
+                FROM announcements a
+                LEFT JOIN users u ON u.id = a.created_by
+                {where_sql}
+                ORDER BY a.created_at DESC
+                LIMIT :limit OFFSET :offset
+            """),
+            params
+        ).fetchall()
+
+        return {
+            "total": total,
+            "announcements": [
+                {
+                    "id": r[0],
+                    "title": r[1],
+                    "message": r[2],
+                    "type": r[3] or "info",
+                    "target": r[4] or "all",
+                    "is_active": r[5],
+                    "scheduled_at": str(r[6]) if r[6] else None,
+                    "expires_at": str(r[7]) if r[7] else None,
+                    "created_by": r[8],
+                    "created_by_username": r[9] or "محذوف",
+                    "created_at": str(r[10]) if r[10] else None,
+                    "reads_count": r[11] or 0,
+                }
+                for r in rows
+            ]
+        }
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"فشل الجلب: {str(e)[:200]}")
+
+
+@router.get("/announcements/stats")
+def announcements_stats(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """إحصائيّات الإعلانات."""
+    try:
+        total = db.execute(text("SELECT COUNT(*) FROM announcements")).scalar() or 0
+        active = db.execute(text("SELECT COUNT(*) FROM announcements WHERE is_active = TRUE")).scalar() or 0
+        total_reads = db.execute(text("SELECT COUNT(*) FROM announcement_reads")).scalar() or 0
+        scheduled = db.execute(
+            text("SELECT COUNT(*) FROM announcements WHERE scheduled_at > NOW() AND is_active = TRUE")
+        ).scalar() or 0
+
+        return {
+            "total": total,
+            "active": active,
+            "total_reads": total_reads,
+            "scheduled": scheduled,
+        }
+    except Exception:
+        return {"total": 0, "active": 0, "total_reads": 0, "scheduled": 0}
+
+
+@router.post("/announcements")
+def create_announcement(
+    payload: dict,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """إنشاء إعلان جديد.
+    
+    Body: {
+        "title": "...", "message": "...",
+        "type": "info|warning|success|danger",
+        "target": "all|plan:pro|plan:enterprise|role:admin",
+        "scheduled_at": "2026-10-05T12:00:00" (optional),
+        "expires_at": "2026-10-20T00:00:00" (optional),
+        "is_active": true
+    }
+    """
+    try:
+        title = (payload.get("title") or "").strip()
+        message = (payload.get("message") or "").strip()
+        if not title or not message:
+            raise HTTPException(status_code=400, detail="العنوان والرسالة مطلوبان")
+
+        atype = payload.get("type") or "info"
+        if atype not in ("info", "warning", "success", "danger"):
+            atype = "info"
+
+        target = payload.get("target") or "all"
+        scheduled_at = payload.get("scheduled_at") or None
+        expires_at = payload.get("expires_at") or None
+        is_active = bool(payload.get("is_active", True))
+
+        row = db.execute(
+            text("""
+                INSERT INTO announcements
+                    (title, message, type, target, is_active, scheduled_at, expires_at, created_by)
+                VALUES (:title, :message, :type, :target, :is_active, :scheduled_at, :expires_at, :created_by)
+                RETURNING id
+            """),
+            {
+                "title": title, "message": message, "type": atype, "target": target,
+                "is_active": is_active, "scheduled_at": scheduled_at,
+                "expires_at": expires_at, "created_by": admin.id,
+            }
+        ).fetchone()
+        db.commit()
+
+        return {"ok": True, "id": row[0] if row else None}
+    except HTTPException:
+        raise
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"فشل الإنشاء: {str(e)[:200]}")
+
+
+@router.patch("/announcements/{announcement_id}")
+def update_announcement(
+    announcement_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """تحديث إعلان."""
+    try:
+        exists = db.execute(
+            text("SELECT 1 FROM announcements WHERE id = :id"),
+            {"id": announcement_id}
+        ).fetchone()
+        if not exists:
+            raise HTTPException(status_code=404, detail="الإعلان غير موجود")
+
+        fields = []
+        params: dict = {"id": announcement_id}
+
+        for key in ("title", "message", "type", "target", "is_active", "scheduled_at", "expires_at"):
+            if key in payload:
+                fields.append(f"{key} = :{key}")
+                params[key] = payload[key]
+
+        if not fields:
+            return {"ok": True, "message": "لا شيء للتحديث"}
+
+        db.execute(
+            text(f"UPDATE announcements SET {', '.join(fields)} WHERE id = :id"),
+            params
+        )
+        db.commit()
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"فشل التحديث: {str(e)[:200]}")
+
+
+@router.delete("/announcements/{announcement_id}")
+def delete_announcement(
+    announcement_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """حذف إعلان."""
+    try:
+        exists = db.execute(
+            text("SELECT 1 FROM announcements WHERE id = :id"),
+            {"id": announcement_id}
+        ).fetchone()
+        if not exists:
+            raise HTTPException(status_code=404, detail="الإعلان غير موجود")
+
+        db.execute(text("DELETE FROM announcements WHERE id = :id"), {"id": announcement_id})
+        db.commit()
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"فشل الحذف: {str(e)[:200]}")

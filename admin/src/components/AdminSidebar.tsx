@@ -13,6 +13,7 @@ const navItems: NavItem[] = [
   { path: "/subscriptions", label: "الاشتراكات والإيرادات", icon: "💳" },
   { path: "/activity", label: "سجلّ النشاط", icon: "📜" },
   { path: "/scans", label: "الفحوصات الأمنيّة", icon: "🔍" },
+  { path: "/announcements", label: "الإعلانات والإشعارات", icon: "📢" },
   { path: "/settings", label: "إعدادات النظام", icon: "⚙️" },
 ];
 

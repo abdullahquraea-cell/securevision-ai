@@ -7,6 +7,7 @@ import AdminSubscriptions from "./pages/AdminSubscriptions";
 import AdminActivity from "./pages/AdminActivity";
 import AdminScans from "./pages/AdminScans";
 import AdminSettings from "./pages/AdminSettings";
+import AdminAnnouncements from "./pages/AdminAnnouncements";
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
         <Route path="/activity" element={<AdminActivity />} />
         <Route path="/scans" element={<AdminScans />} />
         <Route path="/settings" element={<AdminSettings />} />
+        <Route path="/announcements" element={<AdminAnnouncements />} />
       </Routes>
     </BrowserRouter>
   );
