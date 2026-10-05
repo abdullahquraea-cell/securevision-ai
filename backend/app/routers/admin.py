@@ -8,6 +8,9 @@ from datetime import datetime, timedelta
 import psutil
 import time
 
+import secrets
+import hashlib
+
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
@@ -1544,3 +1547,281 @@ def top_processes(
         return {"processes": processes[:limit]}
     except Exception as e:
         return {"processes": [], "error": str(e)[:200]}
+
+
+
+        # ==========================
+# API Keys Management
+# ==========================
+
+def _hash_key(key: str) -> str:
+    """Hash SHA-256 للمفتاح."""
+    return hashlib.sha256(key.encode()).hexdigest()
+
+
+def _generate_api_key() -> tuple[str, str, str]:
+    """يُولّد مفتاح جديد: (full_key, prefix, hash)."""
+    rand = secrets.token_urlsafe(32)
+    full_key = f"svai_{rand}"
+    prefix = full_key[:12]  # svai_xxxxxxx
+    key_hash = _hash_key(full_key)
+    return full_key, prefix, key_hash
+
+
+@router.get("/api-keys")
+def list_api_keys(
+    limit: int = 50,
+    offset: int = 0,
+    user_id: int | None = None,
+    is_active: bool | None = None,
+    search: str | None = None,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """جلب كلّ مفاتيح API."""
+    try:
+        where = []
+        params: dict = {"limit": limit, "offset": offset}
+
+        if user_id:
+            where.append("k.user_id = :user_id")
+            params["user_id"] = user_id
+        if is_active is not None:
+            where.append("k.is_active = :is_active")
+            params["is_active"] = is_active
+        if search:
+            where.append("(k.name ILIKE :search OR u.username ILIKE :search OR k.key_prefix ILIKE :search)")
+            params["search"] = f"%{search}%"
+
+        where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+
+        total = db.execute(
+            text(f"""
+                SELECT COUNT(*) FROM api_keys k
+                LEFT JOIN users u ON u.id = k.user_id
+                {where_sql}
+            """),
+            params
+        ).scalar() or 0
+
+        rows = db.execute(
+            text(f"""
+                SELECT k.id, k.name, k.key_prefix, k.scopes, k.rate_limit_per_min,
+                       k.usage_count, k.last_used_at, k.last_used_ip,
+                       k.is_active, k.expires_at, k.created_at,
+                       k.user_id, u.username, u.email,
+                       k.revoked_at
+                FROM api_keys k
+                LEFT JOIN users u ON u.id = k.user_id
+                {where_sql}
+                ORDER BY k.created_at DESC
+                LIMIT :limit OFFSET :offset
+            """),
+            params
+        ).fetchall()
+
+        return {
+            "total": total,
+            "keys": [
+                {
+                    "id": r[0],
+                    "name": r[1],
+                    "key_prefix": r[2],
+                    "scopes": r[3] or "read",
+                    "rate_limit_per_min": r[4] or 60,
+                    "usage_count": r[5] or 0,
+                    "last_used_at": str(r[6]) if r[6] else None,
+                    "last_used_ip": r[7],
+                    "is_active": r[8],
+                    "expires_at": str(r[9]) if r[9] else None,
+                    "created_at": str(r[10]) if r[10] else None,
+                    "user_id": r[11],
+                    "username": r[12] or "محذوف",
+                    "email": r[13] or "—",
+                    "revoked_at": str(r[14]) if r[14] else None,
+                }
+                for r in rows
+            ]
+        }
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"فشل الجلب: {str(e)[:200]}")
+
+
+@router.get("/api-keys/stats")
+def api_keys_stats(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """إحصائيّات مفاتيح API."""
+    try:
+        total = db.execute(text("SELECT COUNT(*) FROM api_keys")).scalar() or 0
+        active = db.execute(text("SELECT COUNT(*) FROM api_keys WHERE is_active = TRUE")).scalar() or 0
+        revoked = db.execute(text("SELECT COUNT(*) FROM api_keys WHERE is_active = FALSE OR revoked_at IS NOT NULL")).scalar() or 0
+        total_usage = db.execute(text("SELECT COALESCE(SUM(usage_count), 0) FROM api_keys")).scalar() or 0
+        used_last_7d = db.execute(
+            text("SELECT COUNT(*) FROM api_keys WHERE last_used_at >= NOW() - INTERVAL '7 days'")
+        ).scalar() or 0
+
+        return {
+            "total": total,
+            "active": active,
+            "revoked": revoked,
+            "total_usage": total_usage,
+            "used_last_7d": used_last_7d,
+        }
+    except Exception:
+        return {"total": 0, "active": 0, "revoked": 0, "total_usage": 0, "used_last_7d": 0}
+
+
+@router.post("/api-keys")
+def create_api_key(
+    payload: dict,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """إنشاء مفتاح API جديد لمستخدم.
+    
+    Body: {
+        "user_id": 5,
+        "name": "Production Key",
+        "scopes": "read,write",
+        "rate_limit_per_min": 60,
+        "expires_at": "2027-10-01" (optional)
+    }
+    """
+    try:
+        user_id = payload.get("user_id")
+        name = (payload.get("name") or "").strip()
+        if not user_id or not name:
+            raise HTTPException(status_code=400, detail="user_id والاسم مطلوبان")
+
+        # تأكّد أنّ المستخدم موجود
+        user_exists = db.execute(
+            text("SELECT username FROM users WHERE id = :uid"),
+            {"uid": user_id}
+        ).fetchone()
+        if not user_exists:
+            raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+
+        scopes = payload.get("scopes") or "read"
+        rate_limit = int(payload.get("rate_limit_per_min") or 60)
+        expires_at = payload.get("expires_at") or None
+
+        full_key, prefix, key_hash = _generate_api_key()
+
+        db.execute(
+            text("""
+                INSERT INTO api_keys
+                    (user_id, name, key_prefix, key_hash, scopes, rate_limit_per_min, expires_at)
+                VALUES (:uid, :name, :prefix, :hash, :scopes, :rate, :expires)
+            """),
+            {
+                "uid": user_id, "name": name, "prefix": prefix, "hash": key_hash,
+                "scopes": scopes, "rate": rate_limit, "expires": expires_at,
+            }
+        )
+        db.commit()
+
+        return {
+            "ok": True,
+            "key": full_key,  # ⚠️ يُعرض مرّة واحدة فقط!
+            "prefix": prefix,
+            "warning": "احفظ المفتاح الآن — لن يُعرض مرّة أخرى",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"فشل الإنشاء: {str(e)[:200]}")
+
+
+@router.post("/api-keys/{key_id}/revoke")
+def revoke_api_key(
+    key_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """إلغاء مفتاح API."""
+    try:
+        exists = db.execute(text("SELECT 1 FROM api_keys WHERE id = :id"), {"id": key_id}).fetchone()
+        if not exists:
+            raise HTTPException(status_code=404, detail="المفتاح غير موجود")
+
+        db.execute(
+            text("""
+                UPDATE api_keys
+                SET is_active = FALSE, revoked_at = NOW(), revoked_by = :uid
+                WHERE id = :id
+            """),
+            {"id": key_id, "uid": admin.id}
+        )
+        db.commit()
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"فشل الإلغاء: {str(e)[:200]}")
+
+
+@router.post("/api-keys/{key_id}/activate")
+def activate_api_key(
+    key_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """إعادة تفعيل مفتاح API."""
+    try:
+        exists = db.execute(text("SELECT 1 FROM api_keys WHERE id = :id"), {"id": key_id}).fetchone()
+        if not exists:
+            raise HTTPException(status_code=404, detail="المفتاح غير موجود")
+
+        db.execute(
+            text("UPDATE api_keys SET is_active = TRUE, revoked_at = NULL WHERE id = :id"),
+            {"id": key_id}
+        )
+        db.commit()
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"فشل التفعيل: {str(e)[:200]}")
+
+
+@router.delete("/api-keys/{key_id}")
+def delete_api_key(
+    key_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """حذف مفتاح API نهائيًّا."""
+    try:
+        exists = db.execute(text("SELECT 1 FROM api_keys WHERE id = :id"), {"id": key_id}).fetchone()
+        if not exists:
+            raise HTTPException(status_code=404, detail="المفتاح غير موجود")
+
+        db.execute(text("DELETE FROM api_keys WHERE id = :id"), {"id": key_id})
+        db.commit()
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"فشل الحذف: {str(e)[:200]}")

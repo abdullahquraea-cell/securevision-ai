@@ -14,6 +14,7 @@ const navItems: NavItem[] = [
   { path: "/activity", label: "سجلّ النشاط", icon: "📜" },
   { path: "/scans", label: "الفحوصات الأمنيّة", icon: "🔍" },
   { path: "/announcements", label: "الإعلانات والإشعارات", icon: "📢" },
+  { path: "/api-keys", label: "مفاتيح API", icon: "🔑" },
   { path: "/server", label: "مراقبة السيرفر", icon: "🖥️" },
   { path: "/settings", label: "إعدادات النظام", icon: "⚙️" },
 ];
